@@ -124,7 +124,7 @@ ipcMain.handle('off:search', async (_e, query) => {
       // Base française, produits les plus scannés d'abord ; ceux dont le nom contient les mots cherchés passent devant
       const url = `https://fr.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=50&sort_by=unique_scans_n&lc=fr&fields=${OFF_FIELDS}`;
       const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
-      if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+      if (!r.ok) return { ok: false, error: r.status >= 500 || r.status === 429 ? 'busy' : `HTTP ${r.status}` };
       const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
       const words = norm(q).split(/\s+/).filter(Boolean);
       const hit = p => words.every(w => norm(`${p.product_name_fr || p.product_name} ${p.brands}`).includes(w));

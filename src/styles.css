@@ -191,6 +191,10 @@ td.acts { white-space: nowrap; text-align: right; width: 1%; }
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar input { width: auto; }
 .toolbar .grow { flex: 1; min-width: 200px; }
+.toolbar.bulk { margin-top: -4px; font-size: 13px; }
+.toolbar.bulk:empty { display: none; }
+th.cb, td.cb { width: 1%; padding-right: 0; }
+th.cb input, td.cb input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--acc); }
 .sortbox { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--mut); white-space: nowrap; }
 .sortbox select { width: auto; padding: 6px 10px; }
 th.sortable { cursor: pointer; user-select: none; }

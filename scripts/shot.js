@@ -89,10 +89,28 @@ app.on('browser-window-created', (_e, w) => {
         const cm = document.querySelector('.modal-bg form'); cm.src.value = addDays(day, -1); cm.requestSubmit(); await tick();
         check(dayEntries(day).length === before, 'recopie d\\'un jour');
         check(Object.keys(D.dirty).length > 0, 'modifications marquées pour la synchro');
+        // Suppression groupée (le poulet, utilisé dans un plat, doit rester)
+        go('foods');
+        document.querySelector('[data-fsel="std-avocat"]').click(); await tick();
+        document.querySelector('[data-fsel="std-poulet"]').click(); await tick();
+        document.querySelector('[data-fsel-del]').click(); await tick();
+        document.querySelector('.modal-bg form').requestSubmit(); await tick(); await tick();
+        check(!food('std-avocat') && food('std-poulet'), 'suppression groupée : avocat supprimé, poulet conservé');
+        check(!document.querySelector('.modal-bg'), 'pas de fenêtre ouverte après clic sur une case');
+        // Aliments courants : confirmation puis ajout du seul manquant
+        confirmStarter(); await tick();
+        const sm = document.querySelector('.modal-bg form');
+        check(sm && /Ajouter 1 aliment/.test(sm.textContent), 'confirmation des aliments courants (1 manquant)');
+        check(!food('std-avocat'), 'rien n\\'est ajouté avant de confirmer');
+        sm.requestSubmit(); await tick();
+        check(food('std-avocat'), 'aliment courant ajouté après confirmation');
+        document.querySelector('[data-fsel-all]').click(); await tick();
+        check(fSel.size === D.foods.length, 'tout sélectionner');
+        document.querySelector('[data-fsel-clear]').click(); await tick();
         // Tri
-        go('foods'); setSort('foods', 'kcal');
+        setSort('foods', 'kcal');
         const kc = sortItems('foods', [...D.foods]).map(x => x.n.kcal);
-        check(kc[0] === Math.max(...kc), 'tri aliments par calories décroissantes');
+        check(kc[0] === Math.max(...kc), 'tri aliments par calories décroissantes : ' + kc.slice(0, 5).join(',') + ' / ' + JSON.stringify(sortState.foods));
         document.querySelector('[data-sort-col="prot"]').click(); await tick();
         check(sortItems('foods', [...D.foods])[0].id === 'std-whey', 'tri par protéines : whey en tête');
         document.querySelector('[data-sort-col="prot"]').click(); await tick();

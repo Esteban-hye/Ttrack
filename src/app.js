@@ -607,14 +607,23 @@ const th = (k, label, cls = '') => {
 };
 
 let fFilter = 'all';
+const fSel = new Set(); // aliments cochés pour une suppression groupée
+let fVisible = [];
 function renderFoods() {
   const q = norm($('#fSearch').value.trim());
   const list = sortItems('foods', D.foods.filter(f => (fFilter === 'all' || f.fav) && (!q || norm(f.name + ' ' + (f.brand || '')).includes(q))));
+  fVisible = list.map(f => f.id);
+  for (const id of [...fSel]) if (!food(id)) fSel.delete(id);
+  const allOn = list.length > 0 && list.every(f => fSel.has(f.id));
   $('#fCount').textContent = plural(list.length, 'aliment');
   $('#fSort').innerHTML = sortControls('foods');
+  $('#fBulk').innerHTML = fSel.size ? `<span class="mut">${plural(fSel.size, 'sélectionné')}</span>
+    <button class="btn sm" data-fsel-clear>Désélectionner</button>
+    <button class="btn sm danger" data-fsel-del>${ic('trash')}Supprimer (${fSel.size})</button>` : '';
   $$('#fFilter button').forEach(b => b.classList.toggle('on', b.dataset.v === fFilter));
-  $('#fTable').innerHTML = list.length ? `<thead><tr><th></th>${th('name', 'Aliment')}${th('kcal', 'Calories', 'r')}${th('prot', 'Protéines', 'r')}${th('carb', 'Glucides', 'r')}${th('fat', 'Lipides', 'r')}${th('density', 'P / 100 kcal', 'r')}<th>Portion habituelle</th>${th('price', 'Prix', 'r')}<th></th></tr></thead>
+  $('#fTable').innerHTML = list.length ? `<thead><tr><th class="cb"><input type="checkbox" data-fsel-all title="Tout sélectionner" ${allOn ? 'checked' : ''}></th><th></th>${th('name', 'Aliment')}${th('kcal', 'Calories', 'r')}${th('prot', 'Protéines', 'r')}${th('carb', 'Glucides', 'r')}${th('fat', 'Lipides', 'r')}${th('density', 'P / 100 kcal', 'r')}<th>Portion habituelle</th>${th('price', 'Prix', 'r')}<th></th></tr></thead>
     <tbody>${list.map(f => `<tr class="clickable" data-edit-food="${f.id}">
+      <td class="cb"><input type="checkbox" data-fsel="${f.id}" ${fSel.has(f.id) ? 'checked' : ''}></td>
       <td style="width:1%"><button class="icon-btn star ${f.fav ? 'on' : ''}" data-fav="food:${f.id}" title="Favori">${ic('star')}</button></td>
       <td><b>${esc(f.name)}</b><small>${f.brand ? esc(f.brand) + ' · ' : ''}${perTxt(f)}</small></td>
       <td class="r"><b>${kc(f.n.kcal)}</b> kcal</td>
@@ -625,6 +634,22 @@ function renderFoods() {
       <td class="acts"><button class="icon-btn" data-addq="food:${f.id}" title="Ajouter au journal">${ic('plus')}</button><button class="icon-btn" data-edit-food="${f.id}" title="Modifier">${ic('edit')}</button><button class="icon-btn del" data-del-food="${f.id}" title="Supprimer">${ic('trash')}</button></td>
     </tr>`).join('')}</tbody>`
     : `<tbody><tr><td class="empty">${D.foods.length ? 'Aucun aliment ne correspond.' : 'Aucun aliment. Cliquer sur « Aliment » en haut à droite, ou ajouter les aliments courants depuis les Réglages.'}</td></tr></tbody>`;
+}
+
+// Suppression groupée : les aliments utilisés dans un plat sont conservés
+async function deleteSelectedFoods() {
+  const sel = [...fSel].map(food).filter(Boolean);
+  const used = sel.filter(f => D.dishes.some(x => x.items.some(it => it.food === f.id)));
+  const del = sel.filter(f => !used.includes(f));
+  if (!del.length) {
+    modal({ title: 'Suppression impossible', body: `<p style="margin:0">${used.length > 1 ? 'Ces aliments sont tous utilisés' : 'Cet aliment est utilisé'} dans un plat. Les retirer des plats d'abord.</p>`, submit: 'OK', cancel: false, onSubmit: () => {} });
+    return;
+  }
+  const names = del.slice(0, 8).map(f => '« ' + esc(f.name) + ' »').join(', ') + (del.length > 8 ? ` et ${del.length - 8} autre(s)` : '');
+  if (!await confirmModal(`Supprimer ${plural(del.length, 'aliment')}`, `${names}.<br><br>Les journées passées gardent leurs valeurs.${used.length ? `<br><br><span class="mut">${plural(used.length, 'aliment')} utilisé${used.length > 1 ? 's' : ''} dans un plat ne ${used.length > 1 ? 'seront' : 'sera'} pas supprimé${used.length > 1 ? 's' : ''} : ${used.map(f => esc(f.name)).join(', ')}.</span>` : ''}`)) return;
+  for (const f of del) { removeItem('food', f.id); fSel.delete(f.id); }
+  persist(); render();
+  toast(`${plural(del.length, 'aliment')} supprimé${del.length > 1 ? 's' : ''}`, () => { for (const f of del) restoreItem('food', f); persist(); render(); });
 }
 
 function foodModal(f, preset = {}) {
@@ -747,7 +772,7 @@ function offModal(initial, onPick) {
       if (!q) return 'Saisir un nom ou un code-barres.';
       box.innerHTML = '<div class="empty">Recherche…</div>';
       const res = await api.offSearch(q);
-      if (!res.ok) { box.innerHTML = ''; return res.error === 'offline' ? 'Pas de connexion à Open Food Facts.' : res.error === 'timeout' ? 'Open Food Facts ne répond pas, réessayer.' : 'Erreur : ' + res.error; }
+      if (!res.ok) { box.innerHTML = ''; return res.error === 'offline' ? 'Pas de connexion à Open Food Facts.' : res.error === 'timeout' ? 'Open Food Facts ne répond pas, réessayer.' : res.error === 'busy' ? 'Open Food Facts est surchargé : réessayer dans une minute (la recherche par code-barres marche souvent quand même).' : 'Erreur : ' + res.error; }
       results = res.items;
       box.innerHTML = results.map((p, i) => `<div class="offrow" data-off-pick="${i}">
         <div class="tx"><b>${esc(p.name)}</b><small>${esc([p.brand, p.quantity, p.code].filter(Boolean).join(' · '))}</small></div>
@@ -1053,6 +1078,18 @@ const STARTER = [
   ['choco70', 'Chocolat noir 70 %', 'g', 598, 7.8, 46, 43, 11, 24, 0, 20, '2 carreaux'],
   ['coca', 'Coca-Cola', 'ml', 42, 0, 10.6, 0, 0, 10.6, 0, 330, 'Canette']
 ];
+// Demande confirmation avant d'ajouter la liste d'aliments courants
+function confirmStarter() {
+  const missing = STARTER.filter(([key, name]) => !food('std-' + key) && !D.foods.some(f => norm(f.name) === norm(name)));
+  if (!missing.length) { toast('Les aliments courants sont déjà tous présents'); return; }
+  modal({
+    title: 'Ajouter les aliments courants', submit: `Ajouter ${plural(missing.length, 'aliment')}`,
+    body: `<p style="margin:0">${plural(missing.length, 'aliment')} de base ${missing.length > 1 ? 'vont être ajoutés' : 'va être ajouté'} à ta liste, avec des valeurs moyennes que tu pourras modifier :</p>
+      <p class="mut" style="margin:0;font-size:12.5px;max-height:150px;overflow-y:auto">${missing.map(s => esc(s[1])).join(' · ')}</p>
+      <p class="mut" style="margin:0;font-size:12px">Ceux que tu as déjà ne sont pas ajoutés en double. Tu pourras les retirer ensuite dans Aliments (cases à cocher puis « Supprimer »).</p>`,
+    onSubmit: () => { loadStarter(); }
+  });
+}
 function loadStarter() {
   let added = 0;
   for (const [key, name, unit, kcal, prot, carb, fat, fiber, sugar, salt, portion, portionName] of STARTER) {
@@ -1457,7 +1494,7 @@ function bindEvents() {
     if (!names.some(Boolean)) { toast('Au moins un repas est nécessaire'); return; }
     D.settings.meals = names; stampSettings(); persist(); toast('Repas enregistrés');
   };
-  $('#loadStarter').onclick = loadStarter;
+  $('#loadStarter').onclick = confirmStarter;
   $('#expJson').onclick = exportJson;
   $('#impJson').onclick = importJson;
   const UPD = {
@@ -1491,10 +1528,14 @@ function bindEvents() {
     else if (col) setSort('foods', col.dataset.sortCol, true);
   });
   document.addEventListener('click', async e => {
-    const el = e.target.closest('[data-water],[data-add],[data-addq],[data-entry],[data-del-entry],[data-meal-add],[data-meal-dish],[data-fav],[data-edit-food],[data-del-food],[data-edit-dish],[data-del-dish],[data-dup-dish],[data-del-weight],[data-welcome],[data-sync],[data-new-food-from-search]');
+    const el = e.target.closest('[data-fsel],[data-fsel-all],[data-fsel-clear],[data-fsel-del],[data-water],[data-add],[data-addq],[data-entry],[data-del-entry],[data-meal-add],[data-meal-dish],[data-fav],[data-edit-food],[data-del-food],[data-edit-dish],[data-del-dish],[data-dup-dish],[data-del-weight],[data-welcome],[data-sync],[data-new-food-from-search]');
     if (!el) return;
     const d = el.dataset;
-    if (d.water) addWater(day, +d.water);
+    if (d.fsel) { el.checked ? fSel.add(d.fsel) : fSel.delete(d.fsel); renderFoods(); }
+    else if (d.fselAll !== undefined) { for (const id of fVisible) el.checked ? fSel.add(id) : fSel.delete(id); renderFoods(); }
+    else if (d.fselClear !== undefined) { fSel.clear(); renderFoods(); }
+    else if (d.fselDel !== undefined) deleteSelectedFoods();
+    else if (d.water) addWater(day, +d.water);
     else if (d.addq) {
       e.stopPropagation();
       const [k, id] = d.addq.split(':');
@@ -1541,7 +1582,7 @@ function bindEvents() {
     else if (d.delWeight) { removeItem('weight', d.delWeight); persist(); renderStats(); }
     else if (d.newFoodFromSearch !== undefined) { e.preventDefault(); foodModal(null, { name: $('#qSearch').value.trim() }); }
     else if (d.welcome) {
-      if (d.welcome === 'starter') loadStarter();
+      if (d.welcome === 'starter') confirmStarter();
       else if (d.welcome === 'food') foodModal();
       else if (d.welcome === 'sync') go('settings');
       else { D.welcomeDone = true; persist(true); render(); }
