@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('ttrack', {
   save: data => ipcRenderer.invoke('data:save', data),
   exportBackup: (content, filename) => ipcRenderer.invoke('backup:export', content, filename),
   importBackup: () => ipcRenderer.invoke('backup:import'),
+  offSearch: query => ipcRenderer.invoke('off:search', query),
   version: () => ipcRenderer.invoke('app:version'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),

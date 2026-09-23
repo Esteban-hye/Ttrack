@@ -10,6 +10,10 @@
 - **Journal du jour** : anneau des calories, barres protéines / glucides / lipides par rapport aux objectifs, repas (petit-déjeuner, déjeuner, dîner, collation, renommables)
 - **Ajout en un clic** : un clic sur un aliment ou un plat l'ajoute avec sa portion habituelle ; recherche + Entrée ; bouton pour choisir la quantité ; annulation
 - **Aliments** : valeurs pour 100 g, 100 ml ou à la pièce (calories, protéines, glucides, lipides, fibres, sucres, sel), portion habituelle, favoris ; calories calculées depuis les macros si non renseignées
+- **Open Food Facts** : remplir une fiche aliment depuis la base publique, par nom ou par code-barres
+- **Prix** : « X € pour Y g » sur chaque aliment ; coût de chaque entrée, repas, jour et plat, coût moyen dans les statistiques
+- **Tri** des aliments et des plats : calories, macros, protéines pour 100 kcal, prix, protéines par €
+- **Eau** (objectif en litres) et **série** de jours saisis d'affilée
 - **Plats** : composés d'aliments, nombre de portions, poids cuit ; ajout au journal en portions ou en grammes ; un repas du journal peut devenir un plat
 - **Saisie rapide** : juste des calories (et macros) sans créer d'aliment
 - **Recopier un jour** ou un seul repas

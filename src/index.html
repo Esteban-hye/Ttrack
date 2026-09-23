@@ -70,7 +70,7 @@
         <div class="toolbar">
           <input class="grow" id="fSearch" placeholder="Rechercher un aliment ou une marque">
           <div class="seg" id="fFilter"><button data-v="all" class="on">Tous</button><button data-v="fav">Favoris</button></div>
-          <span class="mut" id="fCount"></span>
+          <span id="fSort"></span><span class="mut" id="fCount"></span>
         </div>
         <div class="table-wrap"><table id="fTable"></table></div>
       </div>
@@ -80,7 +80,7 @@
     <section class="page" id="page-dishes" hidden>
       <div class="toolbar">
         <input class="grow" id="dSearch" placeholder="Rechercher un plat" style="max-width:360px">
-        <span class="mut" id="dCount"></span>
+        <span id="dSort"></span><span class="mut" id="dCount"></span>
       </div>
       <div class="grid g3" id="dGrid"></div>
     </section>
@@ -104,6 +104,10 @@
           <div id="wList" class="wlist"></div>
         </div>
       </div>
+      <div class="grid g21" style="margin-top:16px" id="sCostRow">
+        <div class="card"><h3>Coût par jour <span class="mut" id="sCostLbl"></span></h3><div class="chart-box sm"><canvas id="chCost"></canvas></div></div>
+        <div class="card"><h3>Coût moyen par repas <span class="mut">jours saisis</span></h3><div id="sCostMeals" class="wlist" style="max-height:none;margin-top:0"></div></div>
+      </div>
       <div class="card" style="margin-top:16px"><h3>Les plus consommés <span class="mut">sur la période</span></h3><div class="table-wrap"><table id="sTop"></table></div></div>
     </section>
 
@@ -116,6 +120,7 @@
             <div class="row">
               <label class="f">Calories (kcal)<input name="kcal" inputmode="decimal"></label>
               <label class="f">Protéines (g)<input name="prot" inputmode="decimal"></label>
+              <label class="f">Eau (L)<input name="water" inputmode="decimal" placeholder="facultatif"></label>
             </div>
             <div class="row" style="margin-top:10px">
               <label class="f">Glucides (g)<input name="carb" inputmode="decimal"></label>

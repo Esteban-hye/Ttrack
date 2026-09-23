@@ -92,6 +92,51 @@ ipcMain.handle('backup:import', async () => {
   try { return JSON.parse(fs.readFileSync(filePaths[0], 'utf8')); } catch { return { error: 'invalid' }; }
 });
 
+// ---- Open Food Facts (base publique d'aliments) ----
+// Recherche par nom ou par code-barres ; seules les valeurs pour 100 g / 100 ml sont reprises.
+const OFF_FIELDS = 'code,product_name,product_name_fr,brands,nutriments,serving_quantity,quantity,product_quantity,product_quantity_unit';
+function offProduct(p) {
+  const n = p.nutriments || {};
+  const v = k => { const x = Number(n[k + '_100g']); return isFinite(x) ? Math.round(x * 100) / 100 : 0; };
+  let kcal = Number(n['energy-kcal_100g']);
+  if (!isFinite(kcal) && isFinite(Number(n.energy_100g))) kcal = Number(n.energy_100g) / 4.184;
+  return {
+    code: p.code || '',
+    name: (p.product_name_fr || p.product_name || '').trim(),
+    brand: String(p.brands || '').split(',')[0].trim(),
+    unit: /ml|cl|l$/i.test(p.product_quantity_unit || p.quantity || '') ? 'ml' : 'g',
+    n: { kcal: isFinite(kcal) ? Math.round(kcal) : 0, prot: v('proteins'), carb: v('carbohydrates'), fat: v('fat'), fiber: v('fiber'), sugar: v('sugars'), salt: v('salt') },
+    portion: Number(p.serving_quantity) > 0 ? Math.round(Number(p.serving_quantity)) : 0,
+    quantity: p.quantity || ''
+  };
+}
+ipcMain.handle('off:search', async (_e, query) => {
+  const q = String(query || '').trim();
+  if (!q) return { ok: true, items: [] };
+  const headers = { 'User-Agent': `Ttrack/${app.getVersion()} (application personnelle)` };
+  try {
+    let products;
+    if (/^\d{8,14}$/.test(q)) {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${q}.json?fields=${OFF_FIELDS}`, { headers, signal: AbortSignal.timeout(15000) });
+      const j = await r.json();
+      products = j.status === 1 && j.product ? [{ ...j.product, code: q }] : [];
+    } else {
+      // Base française, produits les plus scannés d'abord ; ceux dont le nom contient les mots cherchés passent devant
+      const url = `https://fr.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=50&sort_by=unique_scans_n&lc=fr&fields=${OFF_FIELDS}`;
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
+      if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+      const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const words = norm(q).split(/\s+/).filter(Boolean);
+      const hit = p => words.every(w => norm(`${p.product_name_fr || p.product_name} ${p.brands}`).includes(w));
+      const all = (await r.json()).products || [];
+      products = [...all.filter(hit), ...all.filter(p => !hit(p))].slice(0, 30);
+    }
+    return { ok: true, items: products.map(offProduct).filter(p => p.name && (p.n.kcal || p.n.prot || p.n.carb || p.n.fat)) };
+  } catch (e) {
+    return { ok: false, error: e?.name === 'TimeoutError' ? 'timeout' : 'offline' };
+  }
+});
+
 // ---- Mises à jour (GitHub Releases) ----
 // electron-builder retire le champ "build" du package.json empaqueté : on se fie au fichier
 // app-update.yml qu'il dépose dans les ressources quand une cible de publication est configurée.

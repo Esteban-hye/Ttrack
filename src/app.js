@@ -15,6 +15,8 @@ const num = s => { const t = String(s ?? '').replace(/\s/g, '').replace(',', '.'
 const numOr0 = s => { const n = num(s); return isFinite(n) ? n : 0; };
 const fmt = (v, d = 1) => (Math.round((v || 0) * 10 ** d) / 10 ** d).toLocaleString('fr-FR', { maximumFractionDigits: d });
 const kc = v => Math.round(v || 0).toLocaleString('fr-FR');
+const eurFmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
+const eur = v => eurFmt.format(v || 0);
 const inputVal = v => (v || v === 0) && isFinite(v) ? String(Math.round(v * 100) / 100).replace('.', ',') : '';
 const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -52,6 +54,11 @@ const ICONS = {
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
   sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  sortUp: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  sortDown: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  drop: '<path d="M12 2.7s-7 7.6-7 12.3a7 7 0 0 0 14 0c0-4.7-7-12.3-7-12.3z"/>',
+  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4.1 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.3.3 1.1 1.2 2.3 2.5 2.8z"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>'
 };
 const ic = n => `<svg class="i" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
@@ -107,11 +114,11 @@ function macroSplit(n) {
 const DEFAULT_MEALS = ['Petit-déjeuner', 'Déjeuner', 'Dîner', 'Collation'];
 const emptyData = () => ({
   version: 1,
-  settings: { theme: 'dark', goals: { kcal: 2200, prot: 140, carb: 250, fat: 70, fiber: 0 }, meals: [...DEFAULT_MEALS], u: 0 },
-  foods: [], dishes: [], entries: [], weights: [],
+  settings: { theme: 'dark', goals: { kcal: 2200, prot: 140, carb: 250, fat: 70, fiber: 0, water: 2 }, meals: [...DEFAULT_MEALS], u: 0 },
+  foods: [], dishes: [], entries: [], weights: [], water: [],
   tomb: {}, dirty: {}, sync: null, server: null, welcomeDone: false
 });
-const SYNC_ARRAYS = { food: 'foods', dish: 'dishes', entry: 'entries', weight: 'weights' };
+const SYNC_ARRAYS = { food: 'foods', dish: 'dishes', entry: 'entries', weight: 'weights', water: 'water' };
 let D = emptyData();
 
 const markDirty = id => { D.dirty[id] = 1; };
@@ -147,6 +154,18 @@ const qtyTxt = (q, u) => `${fmt(q, u === 'g' || u === 'ml' ? 0 : 2)} ${unitName(
 const perTxt = f => (f.unit === 'pc' ? 'pour 1 pièce' : `pour 100 ${f.unit}`);
 const foodDefault = f => (f.portion > 0 ? f.portion : base(f));
 const foodNut = (f, q) => scaleN(f.n, q / base(f));
+// Prix saisi « montant pour une quantité » (ex. 2,49 € pour 500 g) ; null si inconnu
+const hasPrice = f => f?.price?.amount > 0 && f.price.qty > 0;
+const foodCost = (f, q) => (hasPrice(f) ? Math.round(f.price.amount * q / f.price.qty * 10000) / 10000 : null);
+const priceTxt = f => (!hasPrice(f) ? '' : f.unit === 'pc' ? `${eur(f.price.amount / f.price.qty)} / pièce` : `${eur(f.price.amount / f.price.qty * 1000)} / ${f.unit === 'ml' ? 'L' : 'kg'}`);
+// Somme des coûts connus ; « partial » si au moins un élément n'a pas de prix
+function sumCost(list) {
+  let cost = 0, known = 0;
+  for (const e of list) if (e.cost != null) { cost += e.cost; known++; }
+  return { cost, known, partial: known > 0 && known < list.length };
+}
+const costTxt = c => (c.known ? `${eur(c.cost)}${c.partial ? '*' : ''}` : '');
+const PARTIAL_TIP = '* certains éléments n\'ont pas de prix';
 function portionTxt(f) {
   const q = foodDefault(f);
   if (f.portionName) return `${f.portionName} (${qtyTxt(q, f.unit)})`;
@@ -155,15 +174,20 @@ function portionTxt(f) {
 // Totaux d'un plat : poids brut (ingrédients en g/ml) ou poids une fois cuit s'il est renseigné
 function dishInfo(d) {
   const n = zero();
-  let w = 0, missing = 0;
+  let w = 0, missing = 0, cost = 0, priced = 0;
   for (const it of d.items) {
     const f = food(it.food);
     if (!f) { missing++; continue; }
     addN(n, foodNut(f, it.qty));
     if (f.unit !== 'pc') w += it.qty;
+    const c = foodCost(f, it.qty);
+    if (c != null) { cost += c; priced++; }
   }
   const portions = d.portions > 0 ? d.portions : 1;
-  return { n, raw: w, weight: d.cooked > 0 ? d.cooked : w, missing, portions, per: scaleN(n, 1 / portions) };
+  return {
+    n, raw: w, weight: d.cooked > 0 ? d.cooked : w, missing, portions, per: scaleN(n, 1 / portions),
+    cost: priced ? cost : null, costPer: priced ? cost / portions : null, costPartial: priced > 0 && priced < d.items.length - missing
+  };
 }
 
 const meals = () => D.settings.meals.map((name, i) => ({ i, name })).filter(m => m.name);
@@ -230,6 +254,8 @@ function renderJournal() {
   const list = dayEntries(day);
   const t = sumEntries(list), g = D.settings.goals;
   const left = (g.kcal || 0) - t.kcal;
+  const dayCost = sumCost(list);
+  const water = waterOf(day), wGoal = (g.water || 0) * 1000, streak = streakDays();
 
   // Accueil tant que la base d'aliments est vide
   const wc = $('#welcomeCard');
@@ -251,20 +277,29 @@ function renderJournal() {
         ${g.kcal ? `<div class="${left < 0 ? 'over' : ''}">${left < 0 ? 'Dépassement' : 'Restant'}<br><b>${kc(Math.abs(left))} kcal</b></div>` : ''}
         <div>Consommé<br><b>${kc(t.kcal)} kcal</b></div>
         <div>Aliments<br><b>${list.length}</b></div>
+        ${dayCost.known ? `<div title="${dayCost.partial ? PARTIAL_TIP : ''}">Coût<br><b>${costTxt(dayCost)}</b></div>` : ''}
       </div>
       ${mbar('prot', t.prot)}${mbar('carb', t.carb)}${mbar('fat', t.fat)}
       <div class="minor">
         <span>Fibres <b>${fmt(t.fiber)} g</b>${g.fiber ? ` / ${fmt(g.fiber, 0)} g` : ''}</span>
         <span>Sucres <b>${fmt(t.sugar)} g</b></span>
         <span>Sel <b>${fmt(t.salt, 2)} g</b></span>
+        ${streak > 1 ? `<span class="streak" title="Jours d'affilée avec au moins un repas saisi">${ic('flame')}<b>${streak}</b> jours d'affilée</span>` : ''}
+      </div>
+      <div class="water">
+        <span class="wl">${ic('drop')}Eau <b>${fmt(water / 1000, 2)} L</b>${wGoal ? ` / ${fmt(wGoal / 1000, 1)} L` : ''}</span>
+        <div class="prog"><i style="width:${wGoal ? Math.min(water / wGoal * 100, 100) : 0}%;background:#38bdf8"></i></div>
+        <button class="btn sm" data-water="-250" title="Retirer un verre" ${water ? '' : 'disabled'}>−</button>
+        <button class="btn sm" data-water="250">+ verre</button>
+        <button class="btn sm" data-water="500">+ 50 cl</button>
       </div>
     </div>`;
 
   $('#meals').innerHTML = meals().map(m => {
     const es = list.filter(e => e.meal === m.i).sort((a, b) => (a.at || a.u) - (b.at || b.u));
-    const s = sumEntries(es);
+    const s = sumEntries(es), c = sumCost(es);
     return `<div class="card meal" data-meal-box="${m.i}">
-      <header><h4>${esc(m.name)}</h4>
+      <header><h4>${esc(m.name)}</h4>${c.known ? `<span class="cost-chip" title="Coût du repas${c.partial ? ' · ' + PARTIAL_TIP : ''}">${costTxt(c)}</span>` : ''}
         ${es.length ? `<div class="mk"><b>${kc(s.kcal)}</b> kcal<br>${macroLine(s)}</div>` : '<span class="mk"></span>'}
         ${es.some(e => e.kind === 'food') ? `<button class="icon-btn" data-meal-dish="${m.i}" title="Enregistrer ce repas comme plat">${ic('save')}</button>` : ''}
         <button class="icon-btn" data-meal-add="${m.i}" title="Ajouter à ce repas">${ic('plus')}</button>
@@ -272,13 +307,33 @@ function renderJournal() {
       ${es.map(e => `<div class="entry" data-entry="${e.id}">
         <div class="nm">${esc(e.name)}<small>${e.kind === 'quick' ? 'saisie rapide' : qtyTxt(e.qty, e.unit)}</small></div>
         <div class="mac">${macroLine(e.n)}</div>
-        <div class="entry-right"><span class="kc">${kc(e.n.kcal)} kcal</span>
+        <div class="entry-right">${dayCost.known ? `<span class="cost">${e.cost != null ? eur(e.cost) : '–'}</span>` : ''}<span class="kc">${kc(e.n.kcal)} kcal</span>
           <span class="act"><button class="icon-btn del" data-del-entry="${e.id}" title="Supprimer">${ic('trash')}</button></span></div>
       </div>`).join('') || '<div class="none">Rien pour l\'instant</div>'}
     </div>`;
   }).join('');
 
   renderQuick();
+}
+
+// ---- Eau et série ----
+// Une ligne par jour avec un identifiant fixe : les deux PC mettent à jour la même
+const waterOf = date => D.water.find(w => w.date === date)?.ml || 0;
+function addWater(date, delta) {
+  const id = 'water-' + date;
+  let w = D.water.find(x => x.id === id);
+  if (!w) { delete D.tomb[id]; w = { id, date, ml: 0 }; D.water.push(w); }
+  w.ml = Math.max(0, w.ml + delta);
+  stamp(w); persist(); render();
+}
+// Jours consécutifs avec au moins une entrée, jusqu'à aujourd'hui (ou hier si rien n'est encore saisi aujourd'hui)
+function streakDays() {
+  const dates = new Set(D.entries.map(e => e.date));
+  let d = todayStr();
+  if (!dates.has(d)) d = addDays(d, -1);
+  let n = 0;
+  while (dates.has(d)) { n++; d = addDays(d, -1); }
+  return n;
 }
 
 // ---- Panneau d'ajout rapide ----
@@ -313,9 +368,10 @@ function quickItems() {
   return all.filter(x => x.kind === 'dish').sort(byName);
 }
 function tileHtml({ kind, item }, first) {
-  let sub, kcal;
-  if (kind === 'food') { sub = portionTxt(item); kcal = foodNut(item, foodDefault(item)).kcal; }
-  else { const di = dishInfo(item); sub = `1 portion${di.portions > 1 ? ` sur ${fmt(di.portions)}` : ''}`; kcal = di.per.kcal; }
+  let sub, kcal, cost;
+  if (kind === 'food') { sub = portionTxt(item); kcal = foodNut(item, foodDefault(item)).kcal; cost = foodCost(item, foodDefault(item)); }
+  else { const di = dishInfo(item); sub = `1 portion${di.portions > 1 ? ` sur ${fmt(di.portions)}` : ''}`; kcal = di.per.kcal; cost = di.costPer; }
+  if (cost != null) sub += ' · ' + eur(cost);
   return `<div class="tile ${first ? 'first' : ''}" data-add="${kind}:${item.id}" title="Clic : ajouter ${esc(sub)}${first ? ' (Entrée)' : ''}">
     <div class="tx"><b>${esc(item.name)}${kind === 'dish' ? '<span class="badge">PLAT</span>' : ''}</b><small>${esc(sub)}${item.brand ? ' · ' + esc(item.brand) : ''}</small></div>
     <span class="kc">${kc(kcal)} kcal</span>
@@ -341,7 +397,7 @@ function newEntry(kind, item, qty, unit, meal = selMeal, date = day) {
     const di = dishInfo(item);
     n = unit === 'portion' ? scaleN(di.n, qty / di.portions) : scaleN(di.n, di.weight ? qty / di.weight : 0);
   }
-  const e = stamp({ id: uid(), date, meal, kind, ref: item.id, name, qty, unit, n: roundN(n), at: Date.now() });
+  const e = stamp({ id: uid(), date, meal, kind, ref: item.id, name, qty, unit, n: roundN(n), cost: costFor(kind, item, qty, unit), at: Date.now() });
   D.entries.push(e);
   return e;
 }
@@ -355,6 +411,15 @@ function quickAddDefault(kind, id) {
   if (!item) return;
   const e = kind === 'food' ? newEntry('food', item, foodDefault(item), item.unit) : newEntry('dish', item, 1, 'portion');
   addAndNotify(e);
+}
+
+// Coût d'une quantité d'aliment ou de plat (null si le prix n'est pas connu)
+function costFor(kind, item, qty, unit) {
+  if (kind === 'food') return foodCost(item, qty);
+  const di = dishInfo(item);
+  if (di.cost == null) return null;
+  const c = unit === 'portion' ? di.cost * qty / di.portions : di.weight ? di.cost * qty / di.weight : null;
+  return c == null ? null : Math.round(c * 10000) / 10000;
 }
 
 // Choix de la quantité (ajout ou modification d'une entrée)
@@ -381,7 +446,9 @@ function qtyModal(kind, item, entry) {
     onMount: form => {
       const upd = () => {
         const q = numOr0(form.qty.value), n = nutFor(q);
-        $('[data-preview]', form).innerHTML = `<div><b>${kc(n.kcal)}</b>kcal</div><div><b class="pl">${fmt(n.prot)}</b>protéines</div><div><b class="gl">${fmt(n.carb)}</b>glucides</div><div><b class="ll">${fmt(n.fat)}</b>lipides</div>`;
+        const cost = costFor(kind, item, q, unit);
+        $('[data-preview]', form).classList.toggle('with-cost', cost != null);
+        $('[data-preview]', form).innerHTML = `${cost != null ? `<div><b>${eur(cost)}</b>coût</div>` : ''}<div><b>${kc(n.kcal)}</b>kcal</div><div><b class="pl">${fmt(n.prot)}</b>protéines</div><div><b class="gl">${fmt(n.carb)}</b>glucides</div><div><b class="ll">${fmt(n.fat)}</b>lipides</div>`;
       };
       const dishPresets = () => {
         const box = $('[data-dish-presets]', form);
@@ -413,7 +480,7 @@ function qtyModal(kind, item, entry) {
       if (!(q > 0)) return 'Quantité invalide.';
       const meal = +form.meal.value;
       if (entry) {
-        entry.qty = q; entry.unit = unit; entry.meal = meal; entry.n = roundN(nutFor(q));
+        entry.qty = q; entry.unit = unit; entry.meal = meal; entry.n = roundN(nutFor(q)); entry.cost = costFor(kind, item, q, unit);
         stamp(entry); persist(); render(); toast('Modifié');
       } else {
         selMeal = meal;
@@ -435,17 +502,21 @@ function quickEntryModal(entry) {
         <label class="f">Glucides (g)<input name="carb" inputmode="decimal" value="${inputVal(entry ? n.carb : '')}"></label>
         <label class="f">Lipides (g)<input name="fat" inputmode="decimal" value="${inputVal(entry ? n.fat : '')}"></label>
       </div>
-      <label class="f">Repas<select name="meal">${meals().map(m => `<option value="${m.i}" ${m.i === (entry ? entry.meal : selMeal) ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>`,
+      <div class="row"><label class="f">Prix (€)<input name="cost" inputmode="decimal" value="${entry?.cost != null ? inputVal(entry.cost) : ''}" placeholder="facultatif"></label>
+      <label class="f">Repas<select name="meal">${meals().map(m => `<option value="${m.i}" ${m.i === (entry ? entry.meal : selMeal) ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label></div>`,
     onSubmit: form => {
+      const price = num(form.cost.value);
+      if (form.cost.value.trim() && !(price >= 0)) return 'Prix invalide.';
+      const cost = form.cost.value.trim() ? Math.round(price * 100) / 100 : null;
       const vals = { prot: numOr0(form.prot.value), carb: numOr0(form.carb.value), fat: numOr0(form.fat.value) };
       let kcal = num(form.kcal.value);
       if (!isFinite(kcal)) kcal = vals.prot * 4 + vals.carb * 4 + vals.fat * 9;
       if (!(kcal > 0)) return 'Indiquer au moins les calories.';
       const nn = roundN({ ...zero(), ...vals, kcal });
       const name = form.name.value.trim() || 'Saisie rapide';
-      if (entry) { Object.assign(entry, { name, n: nn, meal: +form.meal.value }); stamp(entry); persist(); render(); toast('Modifié'); }
+      if (entry) { Object.assign(entry, { name, n: nn, cost, meal: +form.meal.value }); stamp(entry); persist(); render(); toast('Modifié'); }
       else {
-        const e = stamp({ id: uid(), date: day, meal: +form.meal.value, kind: 'quick', ref: null, name, qty: 1, unit: 'quick', n: nn, at: Date.now() });
+        const e = stamp({ id: uid(), date: day, meal: +form.meal.value, kind: 'quick', ref: null, name, qty: 1, unit: 'quick', n: nn, cost, at: Date.now() });
         D.entries.push(e); addAndNotify(e);
       }
     }
@@ -459,6 +530,7 @@ function editEntry(e) {
   // Aliment ou plat supprimé depuis : on repart des valeurs enregistrées, ajustées proportionnellement
   const ghost = { id: e.ref, name: e.name, unit: e.unit };
   ghost.n = scaleN(e.n, base(ghost) / e.qty);
+  if (e.cost != null) ghost.price = { amount: e.cost, qty: e.qty };
   qtyModal('food', ghost, e);
 }
 
@@ -487,21 +559,69 @@ function mealToDishModal(mealIdx) {
 }
 
 // ================= Aliments =================
+// ---- Tri des aliments et des plats ----
+// Aliments : valeurs pour 100 g / 100 ml / 1 pièce. Plats : valeurs par portion.
+const SORTS = {
+  name: { l: 'Nom', dir: 1 },
+  kcal: { l: 'Calories', dir: -1 },
+  prot: { l: 'Protéines', dir: -1 },
+  carb: { l: 'Glucides', dir: -1 },
+  fat: { l: 'Lipides', dir: -1 },
+  density: { l: 'Protéines / 100 kcal', dir: -1 },
+  price: { l: 'Prix', dir: 1 },
+  protEuro: { l: 'Protéines par €', dir: -1 }
+};
+const sortState = { foods: { k: 'name', dir: 1 }, dishes: { k: 'name', dir: 1 } };
+const density = n => (n.kcal > 0 ? n.prot * 100 / n.kcal : 0);
+function metrics(kind, item) {
+  let n, price;
+  if (kind === 'food') { n = item.n; price = hasPrice(item) ? foodCost(item, base(item)) : null; }
+  else { const di = dishInfo(item); n = di.per; price = di.costPartial ? null : di.costPer; }
+  return { name: item.name, kcal: n.kcal, prot: n.prot, carb: n.carb, fat: n.fat, density: density(n), price, protEuro: price > 0 ? n.prot / price : null };
+}
+function sortItems(kind, list) {
+  const { k, dir } = sortState[kind];
+  const m = new Map(list.map(x => [x, metrics(kind === 'foods' ? 'food' : 'dish', x)]));
+  return list.sort((a, b) => {
+    const va = m.get(a)[k], vb = m.get(b)[k];
+    if (k === 'name') return dir * va.localeCompare(vb, 'fr');
+    // Sans prix : toujours en fin de liste
+    if (va == null || vb == null) return (va == null) - (vb == null);
+    return dir * (va - vb) || a.name.localeCompare(b.name, 'fr');
+  });
+}
+function sortControls(kind) {
+  const s = sortState[kind];
+  return `<label class="sortbox">Trier par <select data-sort-sel="${kind}">${Object.entries(SORTS).map(([k, o]) => `<option value="${k}" ${k === s.k ? 'selected' : ''}>${o.l}</option>`).join('')}</select>
+    <button type="button" class="icon-btn" data-sort-dir="${kind}" title="${s.dir > 0 ? 'Croissant' : 'Décroissant'}">${ic(s.dir > 0 ? 'sortUp' : 'sortDown')}</button></label>`;
+}
+function setSort(kind, k, toggle) {
+  const s = sortState[kind];
+  if (toggle && s.k === k) s.dir = -s.dir;
+  else { s.k = k; s.dir = SORTS[k].dir; }
+  render();
+}
+const th = (k, label, cls = '') => {
+  const s = sortState.foods, on = s.k === k;
+  return `<th class="sortable ${cls} ${on ? 'on' : ''}" data-sort-col="${k}" title="Trier par ${SORTS[k].l.toLowerCase()}">${label}${on ? (s.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+};
+
 let fFilter = 'all';
 function renderFoods() {
   const q = norm($('#fSearch').value.trim());
-  const list = D.foods.filter(f => (fFilter === 'all' || f.fav) && (!q || norm(f.name + ' ' + (f.brand || '')).includes(q)))
-    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  const list = sortItems('foods', D.foods.filter(f => (fFilter === 'all' || f.fav) && (!q || norm(f.name + ' ' + (f.brand || '')).includes(q))));
   $('#fCount').textContent = plural(list.length, 'aliment');
+  $('#fSort').innerHTML = sortControls('foods');
   $$('#fFilter button').forEach(b => b.classList.toggle('on', b.dataset.v === fFilter));
-  $('#fTable').innerHTML = list.length ? `<thead><tr><th></th><th>Aliment</th><th>Valeurs</th><th class="r">Calories</th><th class="r">Protéines</th><th class="r">Glucides</th><th class="r">Lipides</th><th>Portion habituelle</th><th></th></tr></thead>
+  $('#fTable').innerHTML = list.length ? `<thead><tr><th></th>${th('name', 'Aliment')}${th('kcal', 'Calories', 'r')}${th('prot', 'Protéines', 'r')}${th('carb', 'Glucides', 'r')}${th('fat', 'Lipides', 'r')}${th('density', 'P / 100 kcal', 'r')}<th>Portion habituelle</th>${th('price', 'Prix', 'r')}<th></th></tr></thead>
     <tbody>${list.map(f => `<tr class="clickable" data-edit-food="${f.id}">
       <td style="width:1%"><button class="icon-btn star ${f.fav ? 'on' : ''}" data-fav="food:${f.id}" title="Favori">${ic('star')}</button></td>
-      <td><b>${esc(f.name)}</b>${f.brand ? `<small>${esc(f.brand)}</small>` : ''}</td>
-      <td class="mut">${perTxt(f)}</td>
+      <td><b>${esc(f.name)}</b><small>${f.brand ? esc(f.brand) + ' · ' : ''}${perTxt(f)}</small></td>
       <td class="r"><b>${kc(f.n.kcal)}</b> kcal</td>
       <td class="r pl">${fmt(f.n.prot)} g</td><td class="r gl">${fmt(f.n.carb)} g</td><td class="r ll">${fmt(f.n.fat)} g</td>
+      <td class="r">${f.n.kcal ? fmt(density(f.n)) + ' g' : '–'}</td>
       <td>${f.portion > 0 ? esc(portionTxt(f)) : '<span class="mut">–</span>'}</td>
+      <td class="r">${hasPrice(f) ? `${priceTxt(f)}<small>${eur(foodCost(f, foodDefault(f)))} la portion${f.n.prot ? ` · ${fmt(f.n.prot / foodCost(f, base(f)), 0)} g prot./€` : ''}</small>` : '<span class="mut">–</span>'}</td>
       <td class="acts"><button class="icon-btn" data-addq="food:${f.id}" title="Ajouter au journal">${ic('plus')}</button><button class="icon-btn" data-edit-food="${f.id}" title="Modifier">${ic('edit')}</button><button class="icon-btn del" data-del-food="${f.id}" title="Supprimer">${ic('trash')}</button></td>
     </tr>`).join('')}</tbody>`
     : `<tbody><tr><td class="empty">${D.foods.length ? 'Aucun aliment ne correspond.' : 'Aucun aliment. Cliquer sur « Aliment » en haut à droite, ou ajouter les aliments courants depuis les Réglages.'}</td></tr></tbody>`;
@@ -513,7 +633,8 @@ function foodModal(f, preset = {}) {
   const nv = k => (f && (v.n[k] || !NUTS.find(x => x.k === k).opt) ? inputVal(v.n[k]) : '');
   modal({
     title: f ? 'Modifier l\'aliment' : 'Nouvel aliment', submit: f ? 'Enregistrer' : 'Créer',
-    body: `<div class="row"><label class="f" style="flex:2">Nom<input name="name" value="${esc(v.name || '')}" placeholder="Ex. : Flocons d'avoine"></label>
+    body: `<div class="offbar"><button type="button" class="btn sm" data-off>${ic('search')}Remplir depuis Open Food Facts</button><span class="mut">recherche par nom ou par code-barres, valeurs à vérifier</span></div>
+      <div class="row"><label class="f" style="flex:2">Nom<input name="name" value="${esc(v.name || '')}" placeholder="Ex. : Flocons d'avoine"></label>
         <label class="f">Marque<input name="brand" value="${esc(v.brand || '')}" placeholder="facultatif"></label></div>
       <div class="row"><label class="f auto">Unité<div class="seg" data-unit>${[['g', 'Grammes'], ['ml', 'Millilitres'], ['pc', 'Pièce']].map(([u, l]) => `<button type="button" data-v="${u}" class="${v.unit === u ? 'on' : ''}">${l}</button>`).join('')}</div></label></div>
       <div class="section-lbl">Valeurs nutritionnelles <span data-per>${perTxt(v)}</span></div>
@@ -534,6 +655,12 @@ function foodModal(f, preset = {}) {
         <label class="f"><span>Quantité (<span data-ulbl>${unitName(v.unit, 2)}</span>)</span><input name="portion" inputmode="decimal" value="${v.portion > 0 ? inputVal(v.portion) : ''}" placeholder="${base(v)}"></label>
         <label class="f" style="flex:2">Nom de la portion<input name="portionName" value="${esc(v.portionName || '')}" placeholder="Ex. : 1 bol, 1 tranche, 1 pot"></label>
       </div>
+      <div class="section-lbl">Prix <span class="mut" style="text-transform:none;letter-spacing:0;font-weight:400">facultatif · pour calculer le coût des repas</span></div>
+      <div class="row">
+        <label class="f">Prix payé (€)<input name="priceAmount" inputmode="decimal" value="${hasPrice(v) ? inputVal(v.price.amount) : ''}" placeholder="Ex. : 2,49"></label>
+        <label class="f"><span>Pour (<span data-ulbl>${unitName(v.unit, 2)}</span>)</span><input name="priceQty" inputmode="decimal" value="${hasPrice(v) ? inputVal(v.price.qty) : ''}" placeholder="Ex. : ${v.unit === 'pc' ? 6 : 500}"></label>
+        <div class="auto mut" data-price-hint style="font-size:12px;padding-bottom:10px;min-width:150px"></div>
+      </div>
       <label class="check"><input type="checkbox" name="fav" ${v.fav ? 'checked' : ''}> Favori</label>`,
     onMount: form => {
       let unit = v.unit;
@@ -543,15 +670,30 @@ function foodModal(f, preset = {}) {
         $('[data-kcal-hint]', form).textContent = !calc ? '' : !isFinite(k) ? `Calories calculées depuis les macros : ${kc(calc)} kcal` : Math.abs(calc - k) > Math.max(25, k * 0.15) ? `Attention : les macros donnent ${kc(calc)} kcal` : '';
       };
       ['kcal', 'prot', 'carb', 'fat'].forEach(k => form[k].addEventListener('input', hint));
+      const priceHint = () => {
+        const tmp = { unit, price: { amount: num(form.priceAmount.value), qty: num(form.priceQty.value) } };
+        const p = numOr0(form.portion.value) || base(tmp);
+        $('[data-price-hint]', form).innerHTML = hasPrice(tmp) ? `${priceTxt(tmp)}<br>${eur(foodCost(tmp, p))} la portion` : '';
+      };
+      ['priceAmount', 'priceQty', 'portion'].forEach(k => form[k].addEventListener('input', priceHint));
       $$('[data-unit] button', form).forEach(b => b.onclick = () => {
         unit = b.dataset.v;
         $$('[data-unit] button', form).forEach(x => x.classList.toggle('on', x === b));
         $('[data-per]', form).textContent = perTxt({ unit });
-        $('[data-ulbl]', form).textContent = unitName(unit, 2);
+        $$('[data-ulbl]', form).forEach(s => { s.textContent = unitName(unit, 2); });
         form.portion.placeholder = base({ unit });
+        form.priceQty.placeholder = 'Ex. : ' + (unit === 'pc' ? 6 : 500);
+        priceHint();
       });
       Object.defineProperty(form, '_unit', { get: () => unit });
-      hint();
+      $('[data-off]', form).onclick = () => offModal(form.name.value.trim(), p => {
+        form.name.value = p.name; form.brand.value = p.brand;
+        $(`[data-unit] button[data-v="${p.unit}"]`, form).click();
+        for (const k of NK) form[k].value = p.n[k] ? inputVal(p.n[k]) : '';
+        if (p.portion) form.portion.value = inputVal(p.portion);
+        hint(); priceHint();
+      });
+      hint(); priceHint();
     },
     onSubmit: form => {
       const name = form.name.value.trim();
@@ -564,10 +706,54 @@ function foodModal(f, preset = {}) {
       const dup = D.foods.find(x => x.id !== f?.id && norm(x.name) === norm(name) && norm(x.brand) === norm(form.brand.value.trim()));
       if (dup) return 'Un aliment porte déjà ce nom.';
       const portion = num(form.portion.value);
-      const data = { name, brand: form.brand.value.trim(), unit: form._unit, n: roundN(n), portion: portion > 0 ? portion : 0, portionName: form.portionName.value.trim(), fav: form.fav.checked };
+      const pa = form.priceAmount.value.trim(), pq = form.priceQty.value.trim();
+      let price = null;
+      if (pa || pq) {
+        price = { amount: num(pa), qty: num(pq) };
+        if (!(price.amount >= 0)) return 'Prix invalide.';
+        if (!(price.qty > 0)) return `Indiquer pour quelle quantité (${unitName(form._unit, 2)}) ce prix est payé.`;
+        if (!price.amount) price = null;
+      }
+      const data = { name, brand: form.brand.value.trim(), unit: form._unit, n: roundN(n), portion: portion > 0 ? portion : 0, portionName: form.portionName.value.trim(), price, fav: form.fav.checked };
       if (f) { Object.assign(f, data); stamp(f); }
       else D.foods.push(stamp({ id: uid(), ...data }));
-      persist(); render(); toast(f ? 'Aliment modifié' : 'Aliment créé');
+      // Les entrées déjà saisies sans prix reçoivent le coût correspondant
+      let filled = 0;
+      if (price && f) for (const e of D.entries) if (e.kind === 'food' && e.ref === f.id && e.cost == null && e.unit === f.unit) { e.cost = foodCost(f, e.qty); stamp(e); filled++; }
+      persist(); render(); toast((f ? 'Aliment modifié' : 'Aliment créé') + (filled ? ` · coût ajouté à ${plural(filled, 'entrée')} du journal` : ''));
+    }
+  });
+}
+
+// Recherche dans Open Food Facts : un clic sur un résultat remplit la fiche aliment
+function offModal(initial, onPick) {
+  let results = [];
+  modal({
+    title: 'Open Food Facts', submit: 'Rechercher', wide: true,
+    body: `<p class="mut" style="margin:0;font-size:12px">Base collaborative et gratuite d'aliments du commerce. La recherche est envoyée à openfoodfacts.org. Les valeurs sont données pour 100 g ou 100 ml.</p>
+      <input name="q" value="${esc(initial)}" placeholder="Ex. : skyr nature, ou le code-barres 3017620422003">
+      <div class="offlist" data-off-list></div>`,
+    onMount: form => {
+      $('[data-off-list]', form).onclick = e => {
+        const r = e.target.closest('[data-off-pick]');
+        if (!r) return;
+        onPick(results[+r.dataset.offPick]);
+        $('[data-close]', form).click();
+      };
+      if (initial) setTimeout(() => form.requestSubmit(), 50);
+    },
+    onSubmit: async form => {
+      const box = $('[data-off-list]', form), q = form.q.value.trim();
+      if (!q) return 'Saisir un nom ou un code-barres.';
+      box.innerHTML = '<div class="empty">Recherche…</div>';
+      const res = await api.offSearch(q);
+      if (!res.ok) { box.innerHTML = ''; return res.error === 'offline' ? 'Pas de connexion à Open Food Facts.' : res.error === 'timeout' ? 'Open Food Facts ne répond pas, réessayer.' : 'Erreur : ' + res.error; }
+      results = res.items;
+      box.innerHTML = results.map((p, i) => `<div class="offrow" data-off-pick="${i}">
+        <div class="tx"><b>${esc(p.name)}</b><small>${esc([p.brand, p.quantity, p.code].filter(Boolean).join(' · '))}</small></div>
+        <span class="kc">${kc(p.n.kcal)} kcal</span><span class="mac">${macroLine(p.n)}</span></div>`).join('')
+        || '<div class="empty">Aucun produit trouvé.</div>';
+      return KEEP_OPEN;
     }
   });
 }
@@ -575,16 +761,18 @@ function foodModal(f, preset = {}) {
 // ================= Plats =================
 function renderDishes() {
   const q = norm($('#dSearch').value.trim());
-  const list = D.dishes.filter(d => !q || norm(d.name).includes(q)).sort((a, b) => (!!b.fav - !!a.fav) || a.name.localeCompare(b.name, 'fr'));
+  const list = sortItems('dishes', D.dishes.filter(d => !q || norm(d.name).includes(q)));
   $('#dCount').textContent = plural(list.length, 'plat');
+  $('#dSort').innerHTML = sortControls('dishes');
   $('#dGrid').innerHTML = list.map(d => {
     const di = dishInfo(d);
     return `<div class="card dish">
       <div class="head"><b>${esc(d.name)}<small>${plural(d.items.length, 'ingrédient')} · ${fmt(di.portions)} portion${di.portions > 1 ? 's' : ''}${di.weight ? ` · ${fmt(di.weight, 0)} g` : ''}</small></b>
         <button class="icon-btn star ${d.fav ? 'on' : ''}" data-fav="dish:${d.id}" title="Favori">${ic('star')}</button></div>
-      <div class="big">${kc(di.per.kcal)} <small>kcal / portion</small></div>
+      <div class="big">${kc(di.per.kcal)} <small>kcal / portion</small>${di.costPer != null ? `<span class="cost-chip" style="float:right;margin-top:6px" title="${di.costPartial ? PARTIAL_TIP : 'Coût par portion'}">${eur(di.costPer)}${di.costPartial ? '*' : ''} / portion</span>` : ''}</div>
       ${macroChips(di.per)}
       ${macroSplit(di.per)}
+      <div class="mut" style="font-size:12px;margin-top:-4px">${fmt(density(di.per))} g de protéines pour 100 kcal${di.costPer > 0 && !di.costPartial ? ` · ${fmt(di.per.prot / di.costPer, 0)} g par €` : ''}</div>
       <ul>${d.items.slice(0, 6).map(it => { const f = food(it.food); return `<li><span>${f ? esc(f.name) : '<i>aliment supprimé</i>'}</span><span>${f ? qtyTxt(it.qty, f.unit) : ''}</span></li>`; }).join('')}${d.items.length > 6 ? `<li><span>+ ${d.items.length - 6} autre(s)</span></li>` : ''}</ul>
       ${di.missing ? `<div class="err" style="margin:0">${plural(di.missing, 'ingrédient')} supprimé${di.missing > 1 ? 's' : ''} : non compté${di.missing > 1 ? 's' : ''}</div>` : ''}
       <div class="foot"><button class="btn pri sm" data-addq="dish:${d.id}">${ic('plus')}Ajouter au journal</button>
@@ -595,6 +783,7 @@ function renderDishes() {
   }).join('') || `<div class="card empty" style="grid-column:1/-1">${D.dishes.length ? 'Aucun plat ne correspond.' : 'Aucun plat. Un plat regroupe plusieurs aliments (ex. : bol de porridge, pâtes bolognaise) pour les ajouter en un clic.'}</div>`;
 }
 
+const ingTxt = (f, q) => `${kc(foodNut(f, q).kcal)} kcal${hasPrice(f) ? `<small class="mut" style="display:block">${eur(foodCost(f, q))}</small>` : ''}`;
 function dishModal(d, preset) {
   const v = structuredClone(d || preset || { name: '', items: [], portions: 1 });
   modal({
@@ -613,15 +802,17 @@ function dishModal(d, preset) {
       let hl = 0, results = [];
       const totals = () => {
         const di = dishInfo({ ...v, portions: numOr0(form.portions.value) || 1, cooked: numOr0(form.cooked.value) });
+        const costLbl = c => (c != null ? ` · ${eur(c)}${di.costPartial ? '*' : ''}` : '');
         const box = (lbl, n) => `<div class="totals-box"><div class="lbl">${lbl}</div><div><b>${kc(n.kcal)}</b>kcal</div><div><b class="pl">${fmt(n.prot)}</b>prot.</div><div><b class="gl">${fmt(n.carb)}</b>gluc.</div><div><b class="ll">${fmt(n.fat)}</b>lip.</div></div>`;
-        $('[data-totals]', form).innerHTML = box(`Total${di.weight ? ` · ${fmt(di.weight, 0)} g` : ''}`, di.n) + box('Par portion', di.per);
+        $('[data-totals]', form).innerHTML = box(`Total${di.weight ? ` · ${fmt(di.weight, 0)} g` : ''}${costLbl(di.cost)}`, di.n) + box(`Par portion${costLbl(di.costPer)}`, di.per)
+          + (di.costPartial ? `<div class="mut" style="font-size:12px;grid-column:1/-1">${PARTIAL_TIP} : coût incomplet</div>` : '');
       };
       const draw = () => {
         list.innerHTML = v.items.map((it, i) => {
           const f = food(it.food);
           return `<div class="ing"><span class="nm">${f ? esc(f.name) : '<i>aliment supprimé</i>'}</span>
             <input data-ing-qty="${i}" inputmode="decimal" value="${inputVal(it.qty)}"><span class="mut">${f ? unitName(f.unit, 2) : ''}</span>
-            <span class="kc" data-ing-kc="${i}">${f ? kc(foodNut(f, it.qty).kcal) + ' kcal' : ''}</span>
+            <span class="kc" data-ing-kc="${i}">${f ? ingTxt(f, it.qty) : ''}</span>
             <button type="button" class="icon-btn del" data-ing-del="${i}">${ic('x')}</button></div>`;
         }).join('') || '<div class="mut" style="font-size:13px">Aucun ingrédient pour l\'instant.</div>';
         totals();
@@ -674,7 +865,7 @@ function dishModal(d, preset) {
         if (i === undefined) return;
         v.items[i].qty = numOr0(e.target.value);
         const f = food(v.items[i].food);
-        if (f) $(`[data-ing-kc="${i}"]`, list).textContent = kc(foodNut(f, v.items[i].qty).kcal) + ' kcal';
+        if (f) $(`[data-ing-kc="${i}"]`, list).innerHTML = ingTxt(f, v.items[i].qty);
         totals();
       });
       list.addEventListener('click', e => {
@@ -721,12 +912,16 @@ function renderStats() {
   const g = D.settings.goals;
   const inTarget = g.kcal ? logged.filter(d => Math.abs(byDay.get(d).kcal - g.kcal) <= g.kcal * 0.1).length : 0;
   const protOk = g.prot ? logged.filter(d => byDay.get(d).prot >= g.prot * 0.95).length : 0;
+  const periodEntries = D.entries.filter(e => e.date >= start && e.date <= end);
+  const pc = sumCost(periodEntries);
   const kpi = (lbl, val, sub) => `<div class="card kpi"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
   $('#sKpis').innerHTML = logged.length
     ? kpi('Moyenne par jour', `${kc(avg.kcal)} kcal`, g.kcal ? `objectif ${kc(g.kcal)} kcal · écart ${avg.kcal - g.kcal > 0 ? '+' : ''}${kc(avg.kcal - g.kcal)}` : '')
       + kpi('Jours dans l\'objectif', `${inTarget} / ${logged.length}`, 'à ±10 % des calories visées')
       + kpi('Protéines moyennes', `${fmt(avg.prot, 0)} g`, g.prot ? `objectif atteint ${plural(protOk, 'jour')}` : '')
-      + kpi('Jours saisis', `${logged.length} / ${statDays}`, `P ${fmt(avg.prot, 0)} · G ${fmt(avg.carb, 0)} · L ${fmt(avg.fat, 0)} g en moyenne`)
+      + (pc.known
+        ? kpi('Coût moyen par jour', `${eur(pc.cost / nLogged)}${pc.partial ? '*' : ''}`, `${eur(pc.cost)} sur la période · ${logged.length}/${statDays} jours saisis`)
+        : kpi('Jours saisis', `${logged.length} / ${statDays}`, `P ${fmt(avg.prot, 0)} · G ${fmt(avg.carb, 0)} · L ${fmt(avg.fat, 0)} g en moyenne`))
     : `<div class="card empty" style="grid-column:1/-1">Aucune donnée sur les ${statDays} derniers jours.</div>`;
   $('#sGoalLbl').textContent = g.kcal ? `objectif ${kc(g.kcal)} kcal` : '';
 
@@ -758,6 +953,24 @@ function renderStats() {
     options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } }
   });
 
+  // Coût
+  $('#sCostRow').hidden = !pc.known;
+  if (pc.known) {
+    const costDay = new Map(dates.map(d => [d, 0]));
+    for (const e of periodEntries) if (e.cost != null) costDay.set(e.date, costDay.get(e.date) + e.cost);
+    $('#sCostLbl').textContent = pc.partial ? PARTIAL_TIP : '';
+    charts.cost = new Chart($('#chCost'), {
+      type: 'bar',
+      data: { labels: lbls, datasets: [{ label: 'Coût', data: dates.map(d => Math.round(costDay.get(d) * 100) / 100), backgroundColor: cssVar('--carb'), borderRadius: 5, maxBarThickness: 34 }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + eur(c.raw) } } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: v => eur(v) } } } }
+    });
+    $('#sCostMeals').innerHTML = meals().map(m => {
+      const c = sumCost(periodEntries.filter(e => e.meal === m.i));
+      return `<div><span>${esc(m.name)}</span><b>${c.known ? eur(c.cost / nLogged) : '–'}</b></div>`;
+    }).join('') + `<div><span><b style="color:var(--txt)">Journée</b></span><b>${eur(pc.cost / nLogged)}</b></div>`;
+  }
+
   // Poids
   const ws = [...D.weights].sort((a, b) => a.date.localeCompare(b.date));
   if (!$('#wDate').value) $('#wDate').value = todayStr();
@@ -777,21 +990,21 @@ function renderStats() {
   for (const e of D.entries) {
     if (e.date < start || e.date > end) continue;
     const k = e.kind === 'quick' ? 'quick:' + e.name : e.kind + ':' + e.ref;
-    const t = top.get(k) || { name: e.name, kind: e.kind, count: 0, kcal: 0, prot: 0 };
-    t.count++; t.kcal += e.n.kcal; t.prot += e.n.prot;
+    const t = top.get(k) || { name: e.name, kind: e.kind, count: 0, kcal: 0, prot: 0, cost: 0 };
+    t.count++; t.kcal += e.n.kcal; t.prot += e.n.prot; t.cost += e.cost || 0;
     top.set(k, t);
   }
   const rows = [...top.values()].sort((a, b) => b.kcal - a.kcal).slice(0, 12);
   const totalK = [...top.values()].reduce((a, t) => a + t.kcal, 0) || 1;
-  $('#sTop').innerHTML = rows.length ? `<thead><tr><th>Aliment ou plat</th><th class="r">Fois</th><th class="r">Calories apportées</th><th class="r">Part</th><th class="r">Protéines</th></tr></thead>
-    <tbody>${rows.map(t => `<tr><td>${esc(t.name)}${t.kind === 'dish' ? ' <span class="chip">plat</span>' : ''}</td><td class="r">${t.count}</td><td class="r">${kc(t.kcal)} kcal</td><td class="r">${Math.round(t.kcal / totalK * 100)} %</td><td class="r pl">${fmt(t.prot, 0)} g</td></tr>`).join('')}</tbody>`
+  $('#sTop').innerHTML = rows.length ? `<thead><tr><th>Aliment ou plat</th><th class="r">Fois</th><th class="r">Calories apportées</th><th class="r">Part</th><th class="r">Protéines</th>${pc.known ? '<th class="r">Coût</th>' : ''}</tr></thead>
+    <tbody>${rows.map(t => `<tr><td>${esc(t.name)}${t.kind === 'dish' ? ' <span class="chip">plat</span>' : ''}</td><td class="r">${t.count}</td><td class="r">${kc(t.kcal)} kcal</td><td class="r">${Math.round(t.kcal / totalK * 100)} %</td><td class="r pl">${fmt(t.prot, 0)} g</td>${pc.known ? `<td class="r">${t.cost ? eur(t.cost) : '–'}</td>` : ''}</tr>`).join('')}</tbody>`
     : '<tbody><tr><td class="empty">Rien sur la période.</td></tr></tbody>';
 }
 
 // ================= Réglages =================
 function renderSettings() {
   const g = D.settings.goals, f = $('#goalForm');
-  for (const k of ['kcal', 'prot', 'carb', 'fat', 'fiber']) if (document.activeElement !== f[k]) f[k].value = g[k] ? inputVal(g[k]) : '';
+  for (const k of ['kcal', 'prot', 'carb', 'fat', 'fiber', 'water']) if (document.activeElement !== f[k]) f[k].value = g[k] ? inputVal(g[k]) : '';
   goalHint();
   $('#mealInputs').innerHTML = [0, 1, 2, 3, 4, 5].map(i => `<label class="f">Repas ${i + 1}<input name="m${i}" value="${esc(D.settings.meals[i] || '')}" placeholder="${i < 4 ? esc(DEFAULT_MEALS[i]) : 'facultatif'}"></label>`).join('');
   $$('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.v === D.settings.theme));
@@ -1229,7 +1442,7 @@ function bindEvents() {
   $('#goalForm').onsubmit = e => {
     e.preventDefault();
     const f = e.target, g = {};
-    for (const k of ['kcal', 'prot', 'carb', 'fat', 'fiber']) {
+    for (const k of ['kcal', 'prot', 'carb', 'fat', 'fiber', 'water']) {
       const v = f[k].value.trim() === '' ? 0 : num(f[k].value);
       if (!(v >= 0)) { $('#goalErr').textContent = 'Valeur invalide.'; return; }
       g[k] = v;
@@ -1268,11 +1481,21 @@ function bindEvents() {
   $('#updInstall').onclick = () => api.installUpdate();
   $('#syncNow').onclick = () => syncNow(false);
 
+  document.addEventListener('change', e => {
+    const s = e.target.closest('[data-sort-sel]');
+    if (s) setSort(s.dataset.sortSel, s.value);
+  });
+  document.addEventListener('click', e => {
+    const dir = e.target.closest('[data-sort-dir]'), col = e.target.closest('[data-sort-col]');
+    if (dir) { sortState[dir.dataset.sortDir].dir *= -1; render(); }
+    else if (col) setSort('foods', col.dataset.sortCol, true);
+  });
   document.addEventListener('click', async e => {
-    const el = e.target.closest('[data-add],[data-addq],[data-entry],[data-del-entry],[data-meal-add],[data-meal-dish],[data-fav],[data-edit-food],[data-del-food],[data-edit-dish],[data-del-dish],[data-dup-dish],[data-del-weight],[data-welcome],[data-sync],[data-new-food-from-search]');
+    const el = e.target.closest('[data-water],[data-add],[data-addq],[data-entry],[data-del-entry],[data-meal-add],[data-meal-dish],[data-fav],[data-edit-food],[data-del-food],[data-edit-dish],[data-del-dish],[data-dup-dish],[data-del-weight],[data-welcome],[data-sync],[data-new-food-from-search]');
     if (!el) return;
     const d = el.dataset;
-    if (d.addq) {
+    if (d.water) addWater(day, +d.water);
+    else if (d.addq) {
       e.stopPropagation();
       const [k, id] = d.addq.split(':');
       if (page !== 'journal') day = todayStr();

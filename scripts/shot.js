@@ -17,6 +17,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const DEMO = `(() => {
   loadStarter();
   const f = id => food('std-' + id);
+  const prices = { skyr: [1.99, 600], avoine: [1.5, 1000], lait: [1.1, 1000], banane: [1.8, 1000], cacahuete: [3.5, 350], poulet: [12, 1000], riz: [2, 1000], brocoli: [3, 1000], huileolive: [9, 1000], pates: [1.2, 1000], amandes: [12, 1000] };
+  for (const [k, [amount, qty]] of Object.entries(prices)) f(k).price = { amount, qty };
   D.dishes.push(stamp({ id: 'd1', name: 'Porridge banane', items: [{ food: 'std-avoine', qty: 60 }, { food: 'std-lait', qty: 250 }, { food: 'std-banane', qty: 120 }, { food: 'std-cacahuete', qty: 15 }], portions: 1, cooked: 0, notes: '', fav: true }));
   D.dishes.push(stamp({ id: 'd2', name: 'Poulet riz brocoli', items: [{ food: 'std-poulet', qty: 450 }, { food: 'std-riz', qty: 540 }, { food: 'std-brocoli', qty: 450 }, { food: 'std-huileolive', qty: 20 }], portions: 3, cooked: 0, notes: '', fav: true }));
   f('skyr').fav = true; f('whey').fav = true;
@@ -66,6 +68,15 @@ app.on('browser-window-created', (_e, w) => {
         document.querySelector('[data-entry="' + sk.id + '"]').click(); await tick();
         const fm = document.querySelector('.modal-bg form'); fm.qty.value = '300'; fm.requestSubmit(); await tick();
         check(Math.round(sk.n.kcal) === 189 && sk.qty === 300, 'modification de quantité : 189 kcal attendus, obtenu ' + sk.n.kcal);
+        check(Math.abs(sk.cost - 0.995) < 0.001, 'coût skyr 300 g (1,99 € / 600 g) : 0,995 attendu, obtenu ' + sk.cost);
+        const d2cost = dishInfo(dish('d2')).costPer;
+        check(Math.abs(d2cost - (0.45 * 12 + 0.54 * 2 + 0.45 * 3 + 0.02 * 9) / 3) < 0.001, 'coût par portion du plat, obtenu ' + d2cost);
+        // Prix ajouté après coup : les entrées sans prix le reçoivent
+        const st = newEntry('food', food('std-steak5'), 200, 'g', 2, day);
+        check(st.cost == null, 'steak sans prix : coût vide');
+        foodModal(food('std-steak5')); await tick();
+        const pm = document.querySelector('.modal-bg form'); pm.priceAmount.value = '5,5'; pm.priceQty.value = '500'; pm.requestSubmit(); await tick();
+        check(Math.abs(st.cost - 2.2) < 0.001, 'coût rétroactif du steak : 2,2 attendu, obtenu ' + st.cost);
         qtyModal('dish', dish('d2')); await tick();
         const dm = document.querySelector('.modal-bg form');
         dm.querySelector('[data-unit-seg] [data-v="g"]').click(); await tick();
@@ -78,6 +89,24 @@ app.on('browser-window-created', (_e, w) => {
         const cm = document.querySelector('.modal-bg form'); cm.src.value = addDays(day, -1); cm.requestSubmit(); await tick();
         check(dayEntries(day).length === before, 'recopie d\\'un jour');
         check(Object.keys(D.dirty).length > 0, 'modifications marquées pour la synchro');
+        // Tri
+        go('foods'); setSort('foods', 'kcal');
+        const kc = sortItems('foods', [...D.foods]).map(x => x.n.kcal);
+        check(kc[0] === Math.max(...kc), 'tri aliments par calories décroissantes');
+        document.querySelector('[data-sort-col="prot"]').click(); await tick();
+        check(sortItems('foods', [...D.foods])[0].id === 'std-whey', 'tri par protéines : whey en tête');
+        document.querySelector('[data-sort-col="prot"]').click(); await tick();
+        check(sortState.foods.dir === 1, 'deuxième clic : ordre inversé');
+        go('dishes'); setSort('dishes', 'price');
+        const dp = sortItems('dishes', [...D.dishes]).map(d => dishInfo(d).costPer);
+        check(dp[0] <= dp[1], 'tri plats par coût croissant');
+        setSort('dishes', 'name'); setSort('foods', 'name'); go('journal');
+        // Eau
+        document.querySelector('[data-water="500"]').click(); await tick();
+        document.querySelector('[data-water="250"]').click(); await tick();
+        document.querySelector('[data-water="-250"]').click(); await tick();
+        check(waterOf(day) === 500, 'eau : 500 ml attendus, obtenu ' + waterOf(day));
+        check(streakDays() >= 14, 'série de jours : ' + streakDays());
         const saved = await window.ttrack.load();
         check(saved.entries.length === D.entries.length && saved.foods.length === D.foods.length, 'sauvegarde sur disque');
         day = todayStr(); render();
@@ -88,7 +117,19 @@ app.on('browser-window-created', (_e, w) => {
       await run(`go('journal'); qtyModal('dish', dish('d2'))`); await shot('2-quantite');
       await run(`document.querySelector('.modal-bg').remove(); dishModal(dish('d1'))`); await shot('2-plat');
       await run(`document.querySelector('.modal-bg').remove(); foodModal(food('std-skyr'))`); await shot('2-aliment');
-      await run(`document.querySelector('.modal-bg').remove(); D.settings.theme = 'light'; go('journal')`); await shot('3-journal-clair');
+      // Open Food Facts : vraie requête (code-barres du Nutella) puis remplissage de la fiche
+      const off = await run(`(async () => { document.querySelector('.modal-bg').remove(); foodModal(); await new Promise(r => setTimeout(r, 100));
+        document.querySelector('[data-off]').click(); await new Promise(r => setTimeout(r, 100));
+        const f = [...document.querySelectorAll('.modal-bg form')].pop(); f.q.value = 'skyr'; f.requestSubmit();
+        for (let i = 0; i < 60 && !document.querySelector('[data-off-pick]') && !f.querySelector('[data-err]').textContent; i++) await new Promise(r => setTimeout(r, 500));
+        const r = await window.ttrack.offSearch('3017620422003');
+        return { n: document.querySelectorAll('[data-off-pick]').length, err: f.querySelector('[data-err]').textContent, bar: r.ok ? r.items[0]?.name + ' ' + r.items[0]?.n.kcal : r.error };
+      })()`);
+      console.log('Open Food Facts :', JSON.stringify(off));
+      if (!off.n) errors.push('Open Food Facts : aucun résultat (' + off.err + ')');
+      await shot('2-openfoodfacts');
+      await run(`document.querySelector('[data-off-pick]')?.click()`); await shot('2-aliment-off');
+      await run(`document.querySelectorAll('.modal-bg').forEach(m => m.remove()); D.settings.theme = 'light'; go('journal')`); await shot('3-journal-clair');
       await run(`go('stats')`); await shot('3-stats-clair');
     } catch (e) { errors.push(String(e)); }
     fs.writeFileSync(path.join(out, 'errors.txt'), errors.join('\n') || 'aucune erreur');
