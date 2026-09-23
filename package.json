@@ -1,0 +1,58 @@
+{
+  "name": "ttrack",
+  "productName": "Ttrack",
+  "version": "0.1.0-alpha",
+  "description": "Ttrack - suivi des calories et des macros",
+  "author": "Esteban",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icon": "electron scripts/make-icon.js",
+    "shot": "electron scripts/shot.js",
+    "dist": "electron-builder --win dir",
+    "setup": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.ttrack.app",
+    "productName": "Ttrack",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "sync.js",
+      "src/**/*",
+      "build/icon.png",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "build/icon.png"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Esteban-hye",
+      "repo": "Ttrack"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ttrack",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Ttrack-Setup-${version}.exe"
+    }
+  },
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  }
+}
