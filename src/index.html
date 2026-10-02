@@ -38,6 +38,11 @@
     <div class="hub">
       <div class="hub-main">
         <div class="box" id="daySummary"></div>
+        <div class="box steps-box">
+          <h3>Pas du jour</h3>
+          <span class="ref"><input id="stepsInput" inputmode="numeric" placeholder="aucun" autocomplete="off"><b>pas</b></span>
+          <span class="err" id="stepsErr"></span>
+        </div>
         <div class="box">
           <h3>Mangé ce jour <span class="mut" id="dayCount"></span></h3>
           <div id="dayList"></div>
@@ -68,6 +73,25 @@
       <div class="box"><h3>Plats les plus mangés <span class="mut small">nombre de fois</span></h3><div class="pie"><div class="pie-canvas"><canvas id="chDishes"></canvas></div><div class="pie-legend" id="dishTop"></div></div></div>
       <div class="box"><h3>Aliments les plus mangés <span class="mut small">nombre de fois, y compris dans les plats</span></h3><div class="pie"><div class="pie-canvas"><canvas id="chFoods"></canvas></div><div class="pie-legend" id="foodTop"></div></div></div>
     </div>
+
+    <h2 class="section-title">Corps <span class="mut small">sur la même période</span></h2>
+    <div class="body-grid">
+      <div class="box">
+        <h3>Nouvelle mesure <span class="mut small">une par jour, la dernière remplace</span></h3>
+        <form class="measure-form" id="measureForm" autocomplete="off">
+          <label class="f">Date<input type="date" name="date" required></label>
+          <label class="f">Poids<span class="ref"><input name="weight" inputmode="decimal" placeholder="75,4"><b>kg</b></span></label>
+          <label class="f">Masse grasse<span class="ref"><input name="fat" inputmode="decimal" placeholder="facultatif"><b>%</b></span></label>
+          <button class="btn pri">Ajouter</button>
+        </form>
+        <div class="err" id="measureErr"></div>
+        <div class="measure-list" id="measureList"></div>
+      </div>
+      <div class="box"><h3>Poids <span class="mut small" id="weightInfo"></span></h3><div class="chart-box sm"><canvas id="chWeight"></canvas></div></div>
+      <div class="box"><h3>Masse grasse <span class="mut small" id="fatInfo"></span></h3><div class="chart-box sm"><canvas id="chFat"></canvas></div></div>
+      <div class="box"><h3>IMC <span class="mut small" id="bmiInfo"></span></h3><div class="chart-box sm"><canvas id="chBmi"></canvas></div></div>
+      <div class="box wide"><h3>Pas par jour <span class="mut small" id="stepsInfo"></span></h3><div class="chart-box sm"><canvas id="chSteps"></canvas></div></div>
+    </div>
   </section>
 
   <!-- Paramètres -->
@@ -87,6 +111,12 @@
         <div id="goalList"></div>
       </div>
       <div class="settings-side">
+      <div class="box">
+        <h3>Profil</h3>
+        <div class="set-row"><div>Taille<small>Sert à calculer l'IMC (poids ÷ taille²)</small></div>
+          <span class="ref"><input id="heightInput" inputmode="decimal" placeholder="aucune"><b>cm</b></span></div>
+        <div class="err" id="heightErr"></div>
+      </div>
       <div class="box">
         <h3>Cloud <span class="mut small">synchro entre tes PC</span></h3>
         <p class="mut small">Tout est chiffré sur ce PC avant l'envoi, photos comprises : le serveur ne peut rien lire.</p>
@@ -201,6 +231,7 @@
 <script src="dishes.js"></script>
 <script src="hub.js"></script>
 <script src="stats.js"></script>
+<script src="body.js"></script>
 <script src="settings.js"></script>
 <script src="cloud.js"></script>
 <script src="app.js"></script>

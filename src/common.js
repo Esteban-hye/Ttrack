@@ -13,7 +13,7 @@ const NUTRIENTS = [
   { k: 'salt', label: 'Sel', unit: 'g' }
 ];
 
-const DB = { foods: [], dishes: [], entries: [], goals: [] };
+const DB = { foods: [], dishes: [], entries: [], goals: [], measures: [], steps: [], profile: [] };
 // Enregistre sur ce PC, puis synchronise peu après si le cloud est connecté
 const save = () => { window.ttrack.save(DB); if (typeof Cloud !== 'undefined') Cloud.soon(); };
 
@@ -112,6 +112,11 @@ function dayTotals(date) {
 function freezeEntries(kind, id) {
   for (const e of DB.entries) if (e.kind === kind && e.ref === id) { e.snap = entryValues(e); e.name = entryName(e); }
 }
+
+// Corps : une mesure par jour { id, date, weight (kg), fat (%) } ; pas : { id, date, steps } ; profil : [{ id: 'profile', height (cm) }]
+const height = () => DB.profile[0]?.height || null;
+const bmi = kg => height() && kg ? kg / (height() / 100) ** 2 : null;
+const stepsFor = date => DB.steps.find(s => s.date === date)?.steps ?? null;
 
 // Objectifs : chaque réglage s'applique à partir de sa date (from), jusqu'au réglage suivant
 const goalFor = date => DB.goals.filter(g => g.from <= date).sort((a, b) => a.from.localeCompare(b.from)).pop() || null;

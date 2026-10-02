@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const store = { records: new Map(), images: new Map(), pushes: 0 };
-const KINDS = ['v2food', 'v2dish', 'v2entry', 'v2goal'];
+const KINDS = ['v2food', 'v2dish', 'v2entry', 'v2goal', 'v2measure', 'v2steps', 'v2profile'];
 let server = null, user = null, onSession = () => {};
 const copy = x => JSON.parse(JSON.stringify(x));
 const need = () => { if (!user) throw new Error('not-signed-in'); };

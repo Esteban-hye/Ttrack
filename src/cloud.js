@@ -7,7 +7,7 @@
 // En cas de modification des deux côtés entre deux synchros, la version de ce PC l'emporte.
 
 const Cloud = (() => {
-  const KINDS = { v2food: 'foods', v2dish: 'dishes', v2entry: 'entries', v2goal: 'goals' };
+  const KINDS = { v2food: 'foods', v2dish: 'dishes', v2entry: 'entries', v2goal: 'goals', v2measure: 'measures', v2steps: 'steps', v2profile: 'profile' };
   const api = window.ttrack.cloud;
   let state = { lastPull: null, hashes: {}, images: [] };
   let status = { server: null, signedIn: false, email: null };

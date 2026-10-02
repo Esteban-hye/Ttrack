@@ -97,6 +97,6 @@ const Settings = (() => {
     renderUpdate();
   })();
 
-  function render() { if (!editing) fill(null); else renderGoals(); }
+  function render() { if (!editing) fill(null); else renderGoals(); Body.renderHeight(); }
   return { render };
 })();

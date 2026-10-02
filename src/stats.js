@@ -129,6 +129,7 @@ const Stats = (() => {
     const c = counts(days);
     pieDishes = renderPie(pieDishes, $('#chDishes'), $('#dishTop'), c.dishes);
     pieFoods = renderPie(pieFoods, $('#chFoods'), $('#foodTop'), c.foods);
+    Body.renderStats(days);
   }
 
   $('#range').addEventListener('click', e => {

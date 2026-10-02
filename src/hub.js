@@ -160,6 +160,7 @@ const Hub = (() => {
     $('#dayPick').value = day;
     $('#todayBtn').hidden = day === today();
     renderSummary(); renderList(); renderAdd();
+    Body.renderSteps();
   }
 
   return { render, get day() { return day; }, setDay };

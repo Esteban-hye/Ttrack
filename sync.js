@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const KINDS = ['v2food', 'v2dish', 'v2entry', 'v2goal'];
+const KINDS = ['v2food', 'v2dish', 'v2entry', 'v2goal', 'v2measure', 'v2steps', 'v2profile'];
 let onSession = () => {};   // appelé quand la session change, pour l'enregistrer
 
 let CFG = { url: '', key: '' };

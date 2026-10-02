@@ -209,6 +209,59 @@ app.on('browser-window-created', (_e, w) => {
         $('#range [data-v="week"]').click(); await tick(300);
       `);
       await shot('5-stats');
+      await step(`
+        // ---- Pas du jour ----
+        $('#tabs [data-page="hub"]').click(); await tick();
+        const steps = v => { const i = $('#stepsInput'); i.value = v; i.dispatchEvent(new Event('change')); };
+        steps('abc'); await tick();
+        check($('#stepsErr').textContent.includes('invalide'), 'pas invalides acceptés');
+        steps('8 500'); await tick();
+        check(stepsFor(today()) === 8500 && $('#stepsErr').textContent === '', 'pas non enregistrés : ' + stepsFor(today()));
+        $('#prevDay').click(); await tick();
+        check($('#stepsInput').value === '', 'pas de la veille : vide attendu, reçu ' + $('#stepsInput').value);
+        steps('12000'); await tick();
+        $('#todayBtn').click(); await tick();
+        check($('#stepsInput').value === '8500' && DB.steps.length === 2, 'pas : retour à aujourd\\'hui ' + $('#stepsInput').value);
+        // ---- Taille ----
+        $('#settingsBtn').click(); await tick();
+        const height = v => { const i = $('#heightInput'); i.value = v; i.dispatchEvent(new Event('change')); };
+        height('20'); await tick();
+        check($('#heightErr').textContent.includes('invalide'), 'taille invalide acceptée');
+        // ---- Mesures ----
+        $('#tabs [data-page="stats"]').click(); await tick(200);
+        check($('#bmiInfo').textContent.includes('taille'), 'IMC sans taille : ' + $('#bmiInfo').textContent);
+        const mf = $('#measureForm'), add = async (d, w, g) => { mf.elements.date.value = d; mf.elements.weight.value = w; mf.elements.fat.value = g; mf.querySelector('.btn.pri').click(); await tick(150); };
+        await add(today(), '5', '');
+        check($('#measureErr').textContent.includes('Poids invalide'), 'poids invalide accepté');
+        await add(today(), '', '');
+        check($('#measureErr').textContent.includes('au moins'), 'mesure vide acceptée');
+        await add(addDays(today(), -3), '80', '20');
+        await add(today(), '78,5', '19,2');
+        check(DB.measures.length === 2 && all('#measureList .measure').length === 2, 'mesures : 2 attendues');
+        check($('#weightInfo').textContent === '78,5 kg · −1,5 kg sur la période', 'info poids : ' + $('#weightInfo').textContent);
+        check($('#fatInfo').textContent === '19,2 % · −0,8 % sur la période', 'info masse grasse : ' + $('#fatInfo').textContent);
+        await add(today(), '78,4', '');
+        const t = DB.measures.find(m => m.date === today());
+        check(DB.measures.length === 2 && t.weight === 78.4 && t.fat === null, 'même date : la mesure doit être remplacée');
+        const wd = Chart.getChart($('#chWeight')).data.datasets[0].data;
+        check(wd[3] === 80 && wd[6] === 78.4 && wd[0] === null, 'courbe poids : ' + JSON.stringify(wd));
+        // IMC une fois la taille connue
+        $('#settingsBtn').click(); await tick();
+        height('180'); await tick();
+        check(DB.profile[0].height === 180, 'taille non enregistrée');
+        $('#tabs [data-page="stats"]').click(); await tick(200);
+        check($('#bmiInfo').textContent === '24,2 · −0,5 sur la période', 'info IMC : ' + $('#bmiInfo').textContent);
+        const sd = Chart.getChart($('#chSteps')).data.datasets[0].data;
+        check(sd[6] === 8500 && sd[5] === 12000 && $('#stepsInfo').textContent.includes('2 jours saisis'), 'pas dans les stats : ' + JSON.stringify(sd) + ' ' + $('#stepsInfo').textContent);
+        // suppression en deux clics
+        const del = all('#measureList .measure [data-del]')[1]; del.click(); await tick();
+        check(DB.measures.length === 2, 'mesure supprimée dès le premier clic');
+        all('#measureList .measure [data-del]')[1].click(); await tick();
+        check(DB.measures.length === 1 && DB.measures[0].date === today(), 'mesure non supprimée');
+        $('main').scrollTop = 99999;
+      `);
+      await shot('8-corps');
+      await step(`$('main').scrollTop = 0;`);
       await step(`$('#settingsBtn').click(); await tick();`);
       await shot('6-parametres');
       await step(`
@@ -263,7 +316,7 @@ app.on('browser-window-created', (_e, w) => {
       const rec = id => fake.store.records.get('v2:' + id);
       const skyrId = await w.webContents.executeJavaScript(`DB.foods.find(f => f.name === 'Skyr nature').id`);
       const counts = k => [...fake.store.records.values()].filter(r => r.kind === k && !r.deleted).length;
-      if (rec(skyrId)?.data?.name !== 'Skyr nature' || counts('v2entry') !== 3 || counts('v2goal') !== 2) errors.push(`cloud : envoi initial incorrect (${counts('v2food')} aliments, ${counts('v2entry')} entrées, ${counts('v2goal')} objectifs)`);
+      if (rec(skyrId)?.data?.name !== 'Skyr nature' || counts('v2entry') !== 3 || counts('v2goal') !== 2 || counts('v2measure') !== 1 || counts('v2steps') !== 2 || counts('v2profile') !== 1) errors.push(`cloud : envoi initial incorrect (${counts('v2food')} aliments, ${counts('v2entry')} entrées, ${counts('v2goal')} objectifs)`);
       const pushesBefore = fake.store.pushes;
       // « L'autre PC » ajoute une pomme et supprime l'objectif le plus ancien
       const oldGoal = await w.webContents.executeJavaScript(`[...DB.goals].sort((a, b) => a.from.localeCompare(b.from))[0].id`);
