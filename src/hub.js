@@ -114,7 +114,7 @@ const Hub = (() => {
       <button class="add-item" data-kind="${k}" data-id="${x.id}">
         <div class="ing-thumb">${thumbHtml(x)}</div>
         <div class="add-name"><span>${esc(x.name)}</span>${k === 'dish' ? '<span class="kind">plat</span>' : ''}</div>
-        <span class="mut small">${k === 'food' ? `${fmt(x.kcal)} kcal / ${fmt(x.ref)} g` : `${fmt1(totals(x.items).sum.kcal)} kcal`}</span>
+        <span class="mut small">${k === 'food' ? (x.unit ? `${fmt1(perPiece(x).kcal)} kcal / pièce` : `${fmt(x.kcal)} kcal / ${fmt(x.ref)} g`) : `${fmt1(totals(x.items).sum.kcal)} kcal`}</span>
       </button>`).join('')
       : `<div class="mut small ing-empty">${DB.foods.length || DB.dishes.length ? 'Rien ne correspond.' : 'La bibliothèque est vide : ajoute d\'abord des aliments.'}</div>`;
   }

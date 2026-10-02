@@ -13,9 +13,13 @@ const Foods = (() => {
         <div class="thumb">${thumbHtml(f)}</div>
         <div class="card-body">
           <div class="name">${esc(f.name)}</div>
-          <div class="mut small">pour ${fmt(f.ref)} g${f.unit ? ` · 1 pièce = ${fmt(f.unit)} g` : ''}</div>
+          ${f.unit ? `
+          <div class="mut small">par pièce (${fmt(f.unit)} g) · ${fmt(f.kcal)} kcal pour ${fmt(f.ref)} g</div>
+          <div class="kcal"><b>${fmt1(perPiece(f).kcal)}</b> kcal <span class="mut small">la pièce</span></div>
+          ${macrosHtml(perPiece(f), fmt1)}` : `
+          <div class="mut small">pour ${fmt(f.ref)} g</div>
           <div class="kcal"><b>${fmt(f.kcal)}</b> kcal</div>
-          ${macrosHtml(f)}
+          ${macrosHtml(f)}`}
           ${tagsHtml(f.tags)}
         </div>
       </button>`).join('');

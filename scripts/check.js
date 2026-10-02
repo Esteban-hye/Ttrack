@@ -64,7 +64,8 @@ app.on('browser-window-created', (_e, w) => {
         await tags('foodTags', ['Fruit', 'laitier']);  // "laitier" doit reprendre l'orthographe "Laitier"
         await submit('#foodForm');
         check(cards('#foodGrid').join() === 'Banane,Skyr nature', 'tri ou ajout incorrect : ' + cards('#foodGrid'));
-        check($('#foodGrid .card').textContent.includes('1 pièce = 120 g'), 'poids d\\'une pièce non affiché');
+        const banane = $('#foodGrid .card').textContent.replace(/\\s+/g, ' ');
+        check(banane.includes('par pièce (120 g)') && banane.includes('106,8 kcal la pièce') && banane.includes('P 1,3'), 'carte en pièces : ' + banane);
         // filtres
         check(all('#foodFilters .chip').map(c => c.textContent).join() === 'Fruit,Laitier,Protéiné', 'filtres : ' + all('#foodFilters .chip').map(c => c.textContent));
         $('#foodFilters [data-tag="Fruit"]').click(); await tick();

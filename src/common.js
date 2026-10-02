@@ -42,6 +42,13 @@ const macrosHtml = (v, f = fmt) => `<div class="macros">
 
 // ---- Ingrédients d'un plat ----
 // Un ingrédient compte en grammes, ou en pièces si l'aliment a un poids à la pièce.
+// Valeurs d'un aliment pour une pièce (null si pas de poids à la pièce)
+const perPiece = f => {
+  if (!f.unit) return null;
+  const v = {};
+  for (const n of NUTRIENTS) v[n.k] = f[n.k] == null ? null : f[n.k] * f.unit / f.ref;
+  return v;
+};
 const ingGrams = (ing, food) => ing.mode === 'piece' ? ing.qty * food.unit : ing.qty;
 
 // Totaux d'une liste d'ingrédients. missing[k] = aliments dont la valeur k est inconnue.
