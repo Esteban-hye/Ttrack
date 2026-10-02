@@ -14,7 +14,8 @@ const NUTRIENTS = [
 ];
 
 const DB = { foods: [], dishes: [], entries: [], goals: [] };
-const save = () => window.ttrack.save(DB);
+// Enregistre sur ce PC, puis synchronise peu après si le cloud est connecté
+const save = () => { window.ttrack.save(DB); if (typeof Cloud !== 'undefined') Cloud.soon(); };
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

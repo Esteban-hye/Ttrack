@@ -75,6 +75,7 @@ const App = (() => {
   (async () => {
     Object.assign(DB, await window.ttrack.load());
     go('hub');
+    Cloud.start();
   })();
 
   return { render, go };

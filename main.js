@@ -1,14 +1,17 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, clipboard, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
+// Les tests utilisent un faux serveur en mémoire
+const sync = process.env.TTRACK_FAKE_CLOUD ? require('./scripts/fake-cloud') : require('./sync');
 
 // Dossier de données alternatif (tests uniquement)
 if (process.env.TTRACK_USERDATA) app.setPath('userData', process.env.TTRACK_USERDATA);
 
-// Tout reste sur ce PC : aliments.json (aliments, plats, journal, objectifs) et les photos dans images/
+// aliments.json : aliments, plats, journal, objectifs. images/ : les photos. reglages.json : serveur et mises à jour.
+// sync.bin : connexion au cloud, chiffrée par Windows. sync-etat.json : ce qui a déjà été synchronisé.
 const FILE = () => path.join(app.getPath('userData'), 'aliments.json');
 const IMAGES = () => path.join(app.getPath('userData'), 'images');
 const IMAGE_NAME = /^[\w-]+\.(png|jpe?g|webp|gif)$/i;
@@ -42,6 +45,7 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(path.join(IMAGES(), name)).toString());
   });
   settings = loadSettings();
+  startCloud();
   createWindow();
   startUpdates();
 });
@@ -101,6 +105,7 @@ ipcMain.handle('image:pick', async () => {
   return canceled || !filePaths?.length ? null : imageFromFile(filePaths[0]);
 });
 ipcMain.handle('image:file', (_e, file) => imageFromFile(file));
+ipcMain.handle('image:missing', (_e, names) => names.filter(n => IMAGE_NAME.test(n) && !fs.existsSync(path.join(IMAGES(), n))));
 ipcMain.handle('image:paste', async () => {
   for (const item of await clipboard.read()) {
     const type = item.types.find(t => /^image\/(png|jpeg|webp|gif)$/.test(t));
@@ -112,10 +117,63 @@ ipcMain.handle('image:paste', async () => {
 // ---- Réglages (reglages.json) ----
 const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'reglages.json');
 let settings = null;
+const readJson = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
 function loadSettings() {
-  try { return { autoUpdate: true, ...JSON.parse(fs.readFileSync(SETTINGS_FILE(), 'utf8')) }; } catch { return { autoUpdate: true }; }
+  const s = { autoUpdate: true, ...readJson(SETTINGS_FILE(), {}) };
+  if ('server' in s) return s;
+  // Pas encore de serveur enregistré : on reprend celui configuré dans l'ancien Ttrack
+  const old = readJson(path.join(app.getPath('userData'), 'ttrack.json'), {});
+  s.server = old.server?.url ? { url: old.server.url, key: old.server.key } : null;
+  writeAtomic(SETTINGS_FILE(), JSON.stringify(s, null, 2));
+  return s;
 }
 const saveSettings = patch => { settings = { ...settings, ...patch }; writeAtomic(SETTINGS_FILE(), JSON.stringify(settings, null, 2)); };
+
+// ---- Cloud (Supabase, données chiffrées sur le PC avant l'envoi) ----
+// sync.bin a le même format que dans l'ancien Ttrack : une connexion existante est reprise telle quelle.
+const SECRET = () => path.join(app.getPath('userData'), 'sync.bin');
+const STATE = () => path.join(app.getPath('userData'), 'sync-etat.json');
+function saveSecret() {
+  const s = sync.secret();
+  if (!s) return fs.rmSync(SECRET(), { force: true });
+  const json = JSON.stringify(s);
+  writeAtomic(SECRET(), safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(json) : json);
+}
+function startCloud() {
+  sync.setOnSession(saveSecret);
+  if (!settings.server) return;
+  sync.setServer(settings.server);
+  try {
+    if (fs.existsSync(SECRET())) {
+      const raw = fs.readFileSync(SECRET());
+      sync.restore(JSON.parse(safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : raw.toString('utf8')));
+    }
+  } catch {}
+}
+const call = fn => async (...args) => {
+  try { return { ok: true, data: await fn(...args) }; }
+  catch (e) { return { ok: false, error: String(e?.message || e) }; }
+};
+const account = r => { saveSecret(); return { email: r.email, recoveryKey: r.recoveryKey }; };
+const resetState = () => writeAtomic(STATE(), '{}');
+ipcMain.handle('cloud:status', () => ({ server: settings.server ? { url: settings.server.url } : null, ...sync.status() }));
+ipcMain.handle('cloud:testserver', call((_e, cfg) => sync.testServer(cfg)));
+ipcMain.handle('cloud:setserver', (_e, cfg) => {
+  sync.signOut(); saveSecret(); resetState();
+  saveSettings({ server: cfg });
+  sync.setServer(cfg || {});
+  return true;
+});
+ipcMain.handle('cloud:signup', call(async (_e, email, pwd) => { resetState(); return account(await sync.signUp(email, pwd)); }));
+ipcMain.handle('cloud:signin', call(async (_e, email, pwd) => { resetState(); return account(await sync.signIn(email, pwd)); }));
+ipcMain.handle('cloud:signout', () => { sync.signOut(); saveSecret(); resetState(); return true; });
+ipcMain.handle('cloud:pull', call((_e, since) => sync.pull(since)));
+ipcMain.handle('cloud:push', call((_e, records) => sync.push(records)));
+ipcMain.handle('cloud:pushimages', call((_e, names) => sync.pushImages(names, IMAGES())));
+ipcMain.handle('cloud:pullimages', call((_e, names) => sync.pullImages(names, IMAGES())));
+ipcMain.handle('cloud:wipe', call(async () => { await sync.wipe(); resetState(); }));
+ipcMain.handle('cloud:state', () => readJson(STATE(), {}));
+ipcMain.handle('cloud:savestate', (_e, state) => { writeAtomic(STATE(), JSON.stringify(state)); return true; });
 
 // ---- Mises à jour (GitHub Releases) ----
 // electron-builder dépose app-update.yml dans les ressources quand une cible de publication est configurée.

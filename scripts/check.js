@@ -7,8 +7,10 @@ const os = require('os');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ttrack-check-'));
 process.env.TTRACK_USERDATA = tmp;
 process.env.TTRACK_HIDDEN = '1';
+process.env.TTRACK_FAKE_CLOUD = '1';
 const { app, clipboard, ClipboardItem } = require('electron');
 require('../main.js');
+const fake = require('./fake-cloud');
 
 const out = path.resolve(process.argv.slice(2).find(a => !a.startsWith('-') && !a.endsWith('check.js')) || path.join(tmp, 'captures'));
 fs.mkdirSync(out, { recursive: true });
@@ -32,7 +34,7 @@ app.on('browser-window-created', (_e, w) => {
   w.webContents.on('console-message', e => { if (e.level === 'error') errors.push(e.message); });
   w.webContents.once('did-finish-load', async () => {
     const shot = async name => { await w.webContents.executeJavaScript('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))'); await wait(600); fs.writeFileSync(path.join(out, name + '.png'), (await w.webContents.capturePage()).toPNG()); };
-    const step = async js => errors.push(...await w.webContents.executeJavaScript(`(async () => { ${HELPERS} ${js}; return f; })()`));
+    const step = async js => { const code = `(async () => { ${HELPERS} ${js}; return f; })()`; try { errors.push(...await w.webContents.executeJavaScript(code)); } catch (e) { fs.writeFileSync(path.join(out, 'etape-ratee.js'), code); throw e; } };
     try {
       await wait(500);
       await step(`
@@ -237,6 +239,71 @@ app.on('browser-window-created', (_e, w) => {
         $('#tabs [data-page="hub"]').click(); await tick();
         check($('#dayList').textContent.includes('retiré de la bibliothèque') && $('#daySummary .big').textContent === '211,9', 'journal après suppression : ' + $('#daySummary .big').textContent);
       `);
+      // ---- Cloud (faux serveur en mémoire) ----
+      const IDLE = `const idle = async () => { await tick(60); while (Cloud.busy) await tick(60); };`;
+      await step(`${IDLE}
+        $('#settingsBtn').click(); await tick();
+        check($('#cloudServer').textContent === 'Non configuré' && $('#cloudLogin').hidden && $('#cloudBtn').hidden, 'cloud : état initial');
+        $('#cloudServerBtn').click(); await tick();
+        const sf = $('#cloudServerForm'); sf.elements.url.value = 'pas une adresse'; sf.elements.key.value = 'cle';
+        sf.querySelector('.btn.pri').click(); await tick(150);
+        check(sf.querySelector('.err').textContent.includes('Adresse invalide'), 'cloud : adresse invalide acceptée');
+        sf.elements.url.value = 'https://test.supabase.co'; sf.querySelector('.btn.pri').click(); await tick(200);
+        check(sf.hidden && $('#cloudServer').textContent === 'https://test.supabase.co' && !$('#cloudLogin').hidden, 'cloud : serveur non enregistré');
+        const lf = $('#cloudLogin'); lf.elements.email.value = 'test@ttrack.fr'; lf.elements.password.value = 'mauvais';
+        lf.querySelector('.btn.pri').click(); await tick(150);
+        check(lf.querySelector('.err').textContent === 'Email ou mot de passe incorrect.', 'cloud : mauvais mot de passe : ' + lf.querySelector('.err').textContent);
+        lf.elements.email.value = 'test@ttrack.fr'; lf.elements.password.value = 'bon-mot-de-passe';
+        lf.querySelector('.btn.pri').click(); await tick(200); await idle();
+        check($('#cloudAccount').textContent === 'test@ttrack.fr' && $('#cloudLogin').hidden && !$('#cloudSignOut').hidden, 'cloud : connexion');
+        check($('#cloudState').textContent.startsWith('Synchronisé'), 'cloud : état ' + $('#cloudState').textContent);
+        check($('#cloudBtn').classList.contains('ok') && !$('#cloudBtn').hidden, 'cloud : icône');
+      `);
+      await shot('7-cloud');
+      const rec = id => fake.store.records.get('v2:' + id);
+      const skyrId = await w.webContents.executeJavaScript(`DB.foods.find(f => f.name === 'Skyr nature').id`);
+      const counts = k => [...fake.store.records.values()].filter(r => r.kind === k && !r.deleted).length;
+      if (rec(skyrId)?.data?.name !== 'Skyr nature' || counts('v2entry') !== 3 || counts('v2goal') !== 2) errors.push(`cloud : envoi initial incorrect (${counts('v2food')} aliments, ${counts('v2entry')} entrées, ${counts('v2goal')} objectifs)`);
+      const pushesBefore = fake.store.pushes;
+      // « L'autre PC » ajoute une pomme et supprime l'objectif le plus ancien
+      const oldGoal = await w.webContents.executeJavaScript(`[...DB.goals].sort((a, b) => a.from.localeCompare(b.from))[0].id`);
+      const later = Date.now() + 1000;
+      fake.store.records.set('v2:pomme-1', { id: 'v2:pomme-1', kind: 'v2food', u: later, deleted: false, data: { id: 'pomme-1', name: 'Pomme', tags: ['Fruit'], ref: 100, unit: 150, kcal: 52, fat: 0.2, sat: null, carb: 14, sugar: 10, fiber: 2.4, prot: 0.3, salt: null, image: '', u: later } });
+      fake.store.records.set('v2:' + oldGoal, { id: 'v2:' + oldGoal, kind: 'v2goal', u: later, deleted: true, data: null });
+      await step(`${IDLE}
+        await Cloud.run(); await idle();
+        check(DB.foods.some(f => f.name === 'Pomme') && DB.goals.length === 1, 'cloud : réception de l\\'autre PC (' + DB.foods.map(f => f.name) + ', ' + DB.goals.length + ' objectifs)');
+        $('#tabs [data-page="foods"]').click(); await tick();
+        check(cards('#foodGrid').join() === 'Pomme,Skyr nature', 'cloud : la pomme n\\'apparaît pas : ' + cards('#foodGrid'));
+      `);
+      if (fake.store.pushes !== pushesBefore) errors.push('cloud : des données reçues ont été renvoyées inutilement');
+      // Modifications ici : kcal du skyr, suppression de la pomme, photo du skyr
+      const savedText2 = await clipboard.readText().catch(() => '');
+      await clipboard.write([new ClipboardItem({ 'image/png': new Blob([fs.readFileSync(path.join(__dirname, '..', 'build', 'icon.png'))], { type: 'image/png' }) })]);
+      await step(`${IDLE}
+        all('#foodGrid .card')[1].click(); await tick();
+        fill('#foodForm', 'kcal', '58'); $('#foodPhoto .paste').click(); await tick(400);
+        await submit('#foodForm');
+        all('#foodGrid .card')[0].click(); await tick();
+        $('#foodForm .del').click(); $('#foodForm .del').click(); await tick();
+        await Cloud.run(); await idle();
+      `);
+      if (savedText2) await clipboard.writeText(savedText2); else clipboard.clear();
+      const img = await w.webContents.executeJavaScript(`DB.foods.find(f => f.name === 'Skyr nature').image`);
+      if (rec(skyrId)?.data?.kcal !== 58) errors.push('cloud : modification non envoyée');
+      if (!rec('pomme-1')?.deleted) errors.push('cloud : suppression non envoyée');
+      if (!img || !fake.store.images.has(img)) errors.push('cloud : photo non envoyée');
+      // Photo absente de ce PC (comme sur un autre PC) : elle est récupérée
+      fs.rmSync(path.join(tmp, 'images', img), { force: true });
+      await step(`${IDLE} await Cloud.run(); await idle();`);
+      if (!fs.existsSync(path.join(tmp, 'images', img))) errors.push('cloud : photo non récupérée');
+      await step(`${IDLE}
+        $('#settingsBtn').click(); await tick();
+        $('#cloudSignOut').click(); await tick(150);
+        check(!$('#cloudLogin').hidden && $('#cloudAccount').textContent === 'Non connecté', 'cloud : déconnexion');
+      `);
+      if (fs.existsSync(path.join(tmp, 'sync.bin'))) errors.push('cloud : connexion encore enregistrée après déconnexion');
+
       await wait(300);
       const saved = JSON.parse(fs.readFileSync(path.join(tmp, 'aliments.json'), 'utf8'));
       const skyr = saved.foods[0];

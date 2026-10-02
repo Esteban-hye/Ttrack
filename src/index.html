@@ -21,6 +21,7 @@
       <input id="search" autocomplete="off">
       <button class="btn pri" id="add"></button>
     </div>
+    <button class="icon-btn cloud" id="cloudBtn" title="Cloud" hidden>☁</button>
     <button class="icon-btn gear" id="settingsBtn" data-page="settings" title="Paramètres">⚙</button>
   </div>
 </header>
@@ -85,6 +86,28 @@
         <h3 class="sub-title">Historique</h3>
         <div id="goalList"></div>
       </div>
+      <div class="settings-side">
+      <div class="box">
+        <h3>Cloud <span class="mut small">synchro entre tes PC</span></h3>
+        <p class="mut small">Tout est chiffré sur ce PC avant l'envoi, photos comprises : le serveur ne peut rien lire.</p>
+        <div class="set-row"><div>Serveur<small id="cloudServer">–</small></div><button class="btn" id="cloudServerBtn">Configurer</button></div>
+        <form class="cloud-form" id="cloudServerForm" autocomplete="off" hidden>
+          <label class="f">Adresse du projet Supabase<input name="url" placeholder="https://xxxx.supabase.co" required></label>
+          <label class="f">Clé publique (anon)<input name="key" required></label>
+          <div class="err"></div>
+          <div class="modal-foot"><span class="grow"></span><button type="button" class="btn" id="cloudServerCancel">Annuler</button><button class="btn pri">Enregistrer</button></div>
+        </form>
+        <div class="set-row"><div>Compte<small id="cloudAccount">–</small></div><button class="btn" id="cloudSignOut" hidden>Se déconnecter</button></div>
+        <form class="cloud-form" id="cloudLogin" autocomplete="off" hidden>
+          <label class="f">Email<input name="email" type="email"></label>
+          <label class="f">Mot de passe<input name="password" type="password"></label>
+          <div class="err"></div>
+          <div class="modal-foot"><button type="button" class="btn" id="cloudSignUp">Créer un compte</button><span class="grow"></span><button class="btn pri">Se connecter</button></div>
+        </form>
+        <div class="recovery" id="cloudRecovery" hidden></div>
+        <div class="set-row"><div>État<small id="cloudState">–</small></div><button class="btn" id="cloudNow">Synchroniser</button></div>
+        <div class="set-row" id="cloudWipeRow" hidden><div>Effacer les données en ligne<small>Vide le serveur et déconnecte ce PC. Les données de ce PC sont gardées.</small></div><button class="btn danger" id="cloudWipe">Effacer</button></div>
+      </div>
       <div class="box">
         <h3>Mises à jour</h3>
         <div class="set-row"><div>Version installée</div><b id="updVersion">–</b></div>
@@ -93,6 +116,7 @@
         <div class="set-row"><div>État<small id="updState">–</small></div><button class="btn" id="updCheck">Rechercher</button></div>
         <div class="set-row" id="updDownloadRow" hidden><div>Nouvelle version disponible<small id="updAvail"></small></div><button class="btn pri" id="updDownload">Télécharger</button></div>
         <div class="set-row" id="updInstallRow" hidden><div>Nouvelle version prête<small>L'appli redémarre pour l'installer</small></div><button class="btn pri" id="updInstall">Installer maintenant</button></div>
+      </div>
       </div>
     </div>
   </section>
@@ -178,6 +202,7 @@
 <script src="hub.js"></script>
 <script src="stats.js"></script>
 <script src="settings.js"></script>
+<script src="cloud.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

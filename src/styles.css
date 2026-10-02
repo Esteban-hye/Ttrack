@@ -227,3 +227,14 @@ label.f small { font-size: 11px; opacity: .8; }
 .switch input:checked + span::after { left: 21px; background: #fff; }
 .btn.armed { background: var(--over); border-color: var(--over); color: #fff; }
 .goal-chip i { border-style: dashed; }
+
+/* Cloud */
+.settings-side { display: flex; flex-direction: column; gap: 18px; }
+.icon-btn.cloud { font-size: 20px; line-height: 1; padding: 6px 9px; color: var(--mut); }
+.icon-btn.cloud.ok { color: var(--acc); }
+.icon-btn.cloud.err { color: var(--over); }
+.icon-btn.cloud:hover { background: var(--card-2); }
+.cloud-form { display: flex; flex-direction: column; gap: 10px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--bd); border-radius: 10px; background: var(--bg); }
+.cloud-form .err { margin-top: 0; }
+.recovery { padding: 12px; border: 1px solid var(--carb); border-radius: 10px; margin-bottom: 8px; font-size: 13px; }
+.recovery code { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
