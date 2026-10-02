@@ -1,7 +1,7 @@
 {
   "name": "ttrack",
   "productName": "Ttrack",
-  "version": "0.2.1-alpha",
+  "version": "0.6.0-alpha",
   "description": "Ttrack - suivi des calories et des macros",
   "author": "Esteban",
   "main": "main.js",
@@ -9,9 +9,9 @@
   "scripts": {
     "start": "electron .",
     "icon": "electron scripts/make-icon.js",
-    "shot": "electron scripts/shot.js",
     "dist": "electron-builder --win dir",
-    "setup": "electron-builder --win nsis"
+    "setup": "electron-builder --win nsis",
+    "check": "electron scripts/check.js"
   },
   "build": {
     "appId": "com.ttrack.app",
@@ -22,7 +22,6 @@
     "files": [
       "main.js",
       "preload.js",
-      "sync.js",
       "src/**/*",
       "build/icon.png",
       "node_modules/**/*"

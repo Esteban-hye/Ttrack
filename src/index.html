@@ -1,174 +1,183 @@
 <!doctype html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: ttimg:">
 <title>Ttrack</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<div id="app" hidden>
-  <aside>
-    <div class="brand"><span data-logo></span>Ttrack<small>ALPHA</small></div>
-    <nav id="nav">
-      <button data-page="journal" class="on"><span data-i="book"></span>Journal</button>
-      <button data-page="foods"><span data-i="apple"></span>Aliments</button>
-      <button data-page="dishes"><span data-i="bowl"></span>Plats</button>
-      <button data-page="stats"><span data-i="chart"></span>Statistiques</button>
-      <button data-page="settings"><span data-i="settings"></span>Réglages</button>
-    </nav>
-    <div class="aside-foot">
-      <div id="syncBadge" class="sync-badge" hidden></div>
-      <nav><button id="themeToggle"></button></nav>
+<header>
+  <div class="brand"><img src="../build/icon.png" alt="">Ttrack</div>
+  <nav class="tabs" id="tabs">
+    <button data-page="hub" class="on">Hub</button>
+    <button data-page="stats">Stats</button>
+    <button data-page="foods"><small>Bibliothèque</small>Aliments <span id="foodCount"></span></button>
+    <button data-page="dishes"><small>Bibliothèque</small>Plats <span id="dishCount"></span></button>
+  </nav>
+  <div class="actions">
+    <div class="lib-actions" id="libActions" hidden>
+      <input id="search" autocomplete="off">
+      <button class="btn pri" id="add"></button>
     </div>
-  </aside>
+    <button class="icon-btn gear" id="settingsBtn" data-page="settings" title="Paramètres">⚙</button>
+  </div>
+</header>
 
-  <div class="content" id="content">
-    <div class="topbar">
-      <h2 id="pageTitle">Journal</h2>
-      <div class="daynav" id="dayBar">
-        <button class="icon-btn" id="prevDay" title="Jour précédent (←)"><span data-i="chevL"></span></button>
-        <label class="daylabel"><b id="dayLabel"></b><input type="date" id="dayPick" title="Choisir une date"></label>
-        <button class="icon-btn" id="nextDay" title="Jour suivant (→)"><span data-i="chevR"></span></button>
-      </div>
+<main>
+  <!-- Hub : la journée -->
+  <section id="page-hub">
+    <div class="daybar">
+      <button class="icon-btn big" id="prevDay" title="Jour précédent">‹</button>
+      <label class="daytitle" title="Choisir une date"><b id="dayLabel"></b><input type="date" id="dayPick"></label>
+      <button class="icon-btn big" id="nextDay" title="Jour suivant">›</button>
       <button class="btn sm" id="todayBtn">Aujourd'hui</button>
-      <button class="btn" id="copyDay" title="Recopier les repas d'un autre jour"><span data-i="copy"></span>Recopier un jour</button>
-      <div class="seg" id="statRange" hidden><button data-v="7">7 jours</button><button data-v="30">30 jours</button><button data-v="90">90 jours</button></div>
-      <button class="btn pri" id="quickAdd"><span data-i="plus"></span>Nouveau</button>
     </div>
-
-    <!-- Journal -->
-    <section class="page" id="page-journal">
-      <div class="journal">
-        <div class="jmain">
-          <div id="welcomeCard"></div>
-          <div class="card summary" id="summary"></div>
-          <div id="meals"></div>
+    <div class="hub">
+      <div class="hub-main">
+        <div class="box" id="daySummary"></div>
+        <div class="box">
+          <h3>Mangé ce jour <span class="mut" id="dayCount"></span></h3>
+          <div id="dayList"></div>
         </div>
-        <div class="jside">
-          <div class="card qpanel">
-            <h3>Ajouter <span class="mut">clic = portion habituelle</span></h3>
-            <div class="seg meal-seg" id="qMeal"></div>
-            <input id="qSearch" placeholder="Rechercher un aliment ou un plat (Ctrl+F)" autocomplete="off">
-            <div class="seg tabs" id="qTabs">
-              <button data-v="recent">Récents</button><button data-v="fav">Favoris</button><button data-v="foods">Aliments</button><button data-v="dishes">Plats</button>
-            </div>
-            <div class="qlist" id="qList"></div>
-            <div class="qfoot">
-              <button class="btn sm" id="qNewFood"><span data-i="plus"></span>Aliment</button>
-              <button class="btn sm" id="qQuick"><span data-i="zap"></span>Saisie rapide</button>
-            </div>
+      </div>
+      <div class="box hub-side">
+        <h3>Ajouter à la journée</h3>
+        <input id="addSearch" placeholder="Rechercher un aliment ou un plat" autocomplete="off">
+        <div class="seg" id="addKind"><button data-v="all" class="on">Tout</button><button data-v="food">Aliments</button><button data-v="dish">Plats</button></div>
+        <div class="add-list" id="addList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section id="page-stats" hidden>
+    <div class="stats-bar">
+      <div class="seg" id="range"><button data-v="week" class="on">Semaine</button><button data-v="month">Mois</button><button data-v="custom">Entre deux dates</button></div>
+      <span class="custom-range" id="customRange" hidden><input type="date" id="rangeFrom"> → <input type="date" id="rangeTo"></span>
+      <span class="mut" id="rangeLabel"></span>
+    </div>
+    <div class="box">
+      <div class="series" id="series"></div>
+      <div class="chart-box"><canvas id="chLine"></canvas></div>
+      <div class="mut small" id="avgLine"></div>
+    </div>
+    <div class="pies">
+      <div class="box"><h3>Plats les plus mangés <span class="mut small">nombre de fois</span></h3><div class="pie"><div class="pie-canvas"><canvas id="chDishes"></canvas></div><div class="pie-legend" id="dishTop"></div></div></div>
+      <div class="box"><h3>Aliments les plus mangés <span class="mut small">nombre de fois, y compris dans les plats</span></h3><div class="pie"><div class="pie-canvas"><canvas id="chFoods"></canvas></div><div class="pie-legend" id="foodTop"></div></div></div>
+    </div>
+  </section>
+
+  <!-- Paramètres -->
+  <section id="page-settings" hidden>
+    <h2 class="page-title">Paramètres</h2>
+    <div class="settings">
+      <div class="box">
+        <h3>Objectifs quotidiens</h3>
+        <p class="mut small">Un objectif s'applique à partir de sa date, jusqu'au prochain changement. Les jours d'avant gardent l'objectif qu'ils avaient : les courbes restent justes. Champ vide = pas d'objectif pour cette valeur.</p>
+        <form id="goalForm" autocomplete="off">
+          <label class="f">À partir du<input type="date" name="from" required></label>
+          <div class="goal-inputs" id="goalInputs"></div>
+          <div class="err" id="goalErr"></div>
+          <div class="modal-foot"><button type="button" class="btn" id="goalCancel" hidden>Annuler la modification</button><span class="grow"></span><button class="btn pri" id="goalSave">Enregistrer l'objectif</button></div>
+        </form>
+        <h3 class="sub-title">Historique</h3>
+        <div id="goalList"></div>
+      </div>
+      <div class="box">
+        <h3>Mises à jour</h3>
+        <div class="set-row"><div>Version installée</div><b id="updVersion">–</b></div>
+        <div class="set-row"><div>Mises à jour automatiques<small>Recherche au lancement puis toutes les 6 heures, téléchargement en arrière-plan, installation à la fermeture de l'appli</small></div>
+          <label class="switch"><input type="checkbox" id="updAuto"><span></span></label></div>
+        <div class="set-row"><div>État<small id="updState">–</small></div><button class="btn" id="updCheck">Rechercher</button></div>
+        <div class="set-row" id="updDownloadRow" hidden><div>Nouvelle version disponible<small id="updAvail"></small></div><button class="btn pri" id="updDownload">Télécharger</button></div>
+        <div class="set-row" id="updInstallRow" hidden><div>Nouvelle version prête<small>L'appli redémarre pour l'installer</small></div><button class="btn pri" id="updInstall">Installer maintenant</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bibliothèque d'aliments -->
+  <section id="page-foods" hidden>
+    <div class="filters" id="foodFilters"></div>
+    <div class="grid" id="foodGrid"></div>
+    <div class="empty" id="foodEmpty" hidden></div>
+  </section>
+
+  <!-- Bibliothèque de plats -->
+  <section id="page-dishes" hidden>
+    <div class="filters" id="dishFilters"></div>
+    <div class="grid" id="dishGrid"></div>
+    <div class="empty" id="dishEmpty" hidden></div>
+  </section>
+</main>
+
+<!-- Fiche d'un aliment -->
+<div class="overlay" id="foodOverlay" hidden>
+  <form class="modal" id="foodForm" autocomplete="off">
+    <h2 class="title"></h2>
+    <div class="modal-body">
+      <div class="photo-col" id="foodPhoto"></div>
+      <div class="fields">
+        <label class="f">Nom<input name="name" required maxlength="120"></label>
+        <div class="f">Tags<div id="foodTags"></div></div>
+        <div class="row">
+          <label class="f">Valeurs pour
+            <span class="ref"><input name="ref" inputmode="decimal" required><b>g</b></span>
+          </label>
+          <label class="f">Poids d'une pièce <small>facultatif, ex. une banane</small>
+            <span class="ref"><input name="unit" inputmode="decimal" placeholder="aucun"><b>g</b></span>
+          </label>
+        </div>
+        <table class="nut" id="foodNut"></table>
+      </div>
+    </div>
+    <div class="err"></div>
+    <div class="modal-foot">
+      <button type="button" class="btn danger del" hidden>Supprimer</button>
+      <span class="grow"></span>
+      <button type="button" class="btn cancel">Annuler</button>
+      <button class="btn pri">Enregistrer</button>
+    </div>
+  </form>
+</div>
+
+<!-- Fiche d'un plat -->
+<div class="overlay" id="dishOverlay" hidden>
+  <form class="modal wide" id="dishForm" autocomplete="off">
+    <h2 class="title"></h2>
+    <div class="modal-body">
+      <div class="photo-col" id="dishPhoto"></div>
+      <div class="fields">
+        <label class="f">Nom<input name="name" required maxlength="120"></label>
+        <div class="f">Tags<div id="dishTags"></div></div>
+        <div class="f">Ingrédients
+          <div class="picker">
+            <input id="ingSearch" placeholder="Ajouter un aliment de la bibliothèque…">
+            <div class="picker-list" id="ingList" hidden></div>
           </div>
         </div>
+        <div id="ingRows" class="ing-rows"></div>
+        <table class="nut totals" id="dishTotals"></table>
       </div>
-    </section>
-
-    <!-- Aliments -->
-    <section class="page" id="page-foods" hidden>
-      <div class="card">
-        <div class="toolbar">
-          <input class="grow" id="fSearch" placeholder="Rechercher un aliment ou une marque">
-          <div class="seg" id="fFilter"><button data-v="all" class="on">Tous</button><button data-v="fav">Favoris</button></div>
-          <span id="fSort"></span><span class="mut" id="fCount"></span>
-        </div>
-        <div class="toolbar bulk" id="fBulk">
-        </div>
-        <div class="table-wrap"><table id="fTable"></table></div>
-      </div>
-    </section>
-
-    <!-- Plats -->
-    <section class="page" id="page-dishes" hidden>
-      <div class="toolbar">
-        <input class="grow" id="dSearch" placeholder="Rechercher un plat" style="max-width:360px">
-        <span id="dSort"></span><span class="mut" id="dCount"></span>
-      </div>
-      <div class="grid g3" id="dGrid"></div>
-    </section>
-
-    <!-- Statistiques -->
-    <section class="page" id="page-stats" hidden>
-      <div class="grid g4" id="sKpis"></div>
-      <div class="grid g21" style="margin-top:16px">
-        <div class="card"><h3>Calories par jour <span class="mut" id="sGoalLbl"></span></h3><div class="chart-box"><canvas id="chKcal"></canvas></div></div>
-        <div class="card"><h3>Répartition des calories <span class="mut">moyenne des jours saisis</span></h3><div class="chart-box"><canvas id="chMacro"></canvas></div></div>
-      </div>
-      <div class="grid g21" style="margin-top:16px">
-        <div class="card"><h3>Protéines par jour</h3><div class="chart-box sm"><canvas id="chProt"></canvas></div></div>
-        <div class="card"><h3>Poids</h3>
-          <form class="row" id="wForm" style="margin-bottom:12px">
-            <label class="f">Poids (kg)<input id="wKg" inputmode="decimal" placeholder="75,4"></label>
-            <label class="f">Date<input id="wDate" type="date"></label>
-            <button class="btn pri">Ajouter</button>
-          </form>
-          <div class="chart-box sm"><canvas id="chWeight"></canvas></div>
-          <div id="wList" class="wlist"></div>
-        </div>
-      </div>
-      <div class="grid g21" style="margin-top:16px" id="sCostRow">
-        <div class="card"><h3>Coût par jour <span class="mut" id="sCostLbl"></span></h3><div class="chart-box sm"><canvas id="chCost"></canvas></div></div>
-        <div class="card"><h3>Coût moyen par repas <span class="mut">jours saisis</span></h3><div id="sCostMeals" class="wlist" style="max-height:none;margin-top:0"></div></div>
-      </div>
-      <div class="card" style="margin-top:16px"><h3>Les plus consommés <span class="mut">sur la période</span></h3><div class="table-wrap"><table id="sTop"></table></div></div>
-    </section>
-
-    <!-- Réglages -->
-    <section class="page" id="page-settings" hidden>
-      <div class="grid g2">
-        <div class="card">
-          <h3>Objectifs quotidiens</h3>
-          <form id="goalForm">
-            <div class="row">
-              <label class="f">Calories (kcal)<input name="kcal" inputmode="decimal"></label>
-              <label class="f">Protéines (g)<input name="prot" inputmode="decimal"></label>
-              <label class="f">Eau (L)<input name="water" inputmode="decimal" placeholder="facultatif"></label>
-            </div>
-            <div class="row" style="margin-top:10px">
-              <label class="f">Glucides (g)<input name="carb" inputmode="decimal"></label>
-              <label class="f">Lipides (g)<input name="fat" inputmode="decimal"></label>
-              <label class="f">Fibres (g)<input name="fiber" inputmode="decimal" placeholder="facultatif"></label>
-            </div>
-            <p class="mut" id="goalHint" style="font-size:12px;margin:10px 0 0"></p>
-            <div class="err" id="goalErr"></div>
-            <button class="btn pri">Enregistrer</button>
-          </form>
-        </div>
-        <div class="card">
-          <h3>Repas</h3>
-          <form id="mealForm">
-            <div class="grid g2" id="mealInputs" style="gap:10px"></div>
-            <p class="mut" style="font-size:12px;margin:10px 0 12px">Laisser un champ vide pour masquer ce repas.</p>
-            <button class="btn pri">Enregistrer</button>
-          </form>
-        </div>
-        <div class="card">
-          <h3>Affichage et données</h3>
-          <div class="set-row"><div>Thème</div><div class="seg" id="setTheme"><button data-v="light">Clair</button><button data-v="dark">Sombre</button></div></div>
-          <div class="set-row"><div>Aliments courants<small>Ajoute une trentaine d'aliments de base (valeurs moyennes, modifiables)</small></div><button class="btn" id="loadStarter">Ajouter</button></div>
-          <div class="set-row"><div>Exporter<small>Sauvegarde complète dans un fichier .json</small></div><button class="btn" id="expJson"><span data-i="download"></span>Exporter</button></div>
-          <div class="set-row"><div>Importer<small>Ajoute le contenu d'une sauvegarde, doublons ignorés</small></div><button class="btn" id="impJson"><span data-i="upload"></span>Importer</button></div>
-        </div>
-        <div class="card">
-          <h3>Synchronisation entre PC</h3>
-          <p class="mut" style="margin:0 0 6px;font-size:12px">Les données sont chiffrées sur ce PC avant l'envoi : le serveur ne peut pas les lire.</p>
-          <div class="set-row"><div>Serveur<small id="syncServer">Non configuré</small></div><button class="btn" data-sync="server">Configurer</button></div>
-          <div class="set-row"><div>Compte<small id="syncAccount">Non connecté</small></div><div id="syncButtons" style="display:flex;gap:8px"></div></div>
-          <div class="set-row"><div>État<small id="syncState">Synchronisation désactivée</small></div><button class="btn" id="syncNow" hidden>Synchroniser</button></div>
-          <div class="set-row" id="syncWipeRow" hidden><div>Effacer les données en ligne<small>Vide le serveur. Les données de ce PC sont conservées.</small></div><button class="btn danger" data-sync="wipe">Effacer</button></div>
-        </div>
-        <div class="card">
-          <h3>Mises à jour</h3>
-          <div class="set-row"><div>Version installée</div><b id="appVersion">–</b></div>
-          <div class="set-row"><div>État<small id="updDetail">–</small></div><button class="btn" id="updCheck">Rechercher</button></div>
-          <div class="set-row" id="updInstallRow" hidden><div>Nouvelle version prête<small>L'application redémarre pour l'installer</small></div><button class="btn pri" id="updInstall">Installer</button></div>
-        </div>
-      </div>
-    </section>
-  </div>
+    </div>
+    <div class="err"></div>
+    <div class="modal-foot">
+      <button type="button" class="btn danger del" hidden>Supprimer</button>
+      <span class="grow"></span>
+      <button type="button" class="btn cancel">Annuler</button>
+      <button class="btn pri">Enregistrer</button>
+    </div>
+  </form>
 </div>
 
 <script src="../node_modules/chart.js/dist/chart.umd.js"></script>
+<script src="common.js"></script>
+<script src="foods.js"></script>
+<script src="dishes.js"></script>
+<script src="hub.js"></script>
+<script src="stats.js"></script>
+<script src="settings.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,26 +1,18 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('ttrack', {
   load: () => ipcRenderer.invoke('data:load'),
   save: data => ipcRenderer.invoke('data:save', data),
-  exportBackup: (content, filename) => ipcRenderer.invoke('backup:export', content, filename),
-  importBackup: () => ipcRenderer.invoke('backup:import'),
-  offSearch: query => ipcRenderer.invoke('off:search', query),
-  version: () => ipcRenderer.invoke('app:version'),
-  checkUpdate: () => ipcRenderer.invoke('update:check'),
-  installUpdate: () => ipcRenderer.invoke('update:install'),
-  onUpdate: cb => ipcRenderer.on('update:status', (_e, data) => cb(data)),
-  openExternal: url => ipcRenderer.invoke('app:open', url),
-  copyText: text => ipcRenderer.invoke('app:copy', text),
-  syncSignUp: (email, pwd) => ipcRenderer.invoke('sync:signup', email, pwd),
-  syncSignIn: (email, pwd) => ipcRenderer.invoke('sync:signin', email, pwd),
-  syncRecover: (email, pwd, rk, newPwd) => ipcRenderer.invoke('sync:recover', email, pwd, rk, newPwd),
-  syncRestore: saved => ipcRenderer.invoke('sync:restore', saved),
-  syncSignOut: () => ipcRenderer.invoke('sync:signout'),
-  syncStatus: () => ipcRenderer.invoke('sync:status'),
-  syncSetServer: cfg => ipcRenderer.invoke('sync:setserver', cfg),
-  syncTestServer: cfg => ipcRenderer.invoke('sync:testserver', cfg),
-  syncPull: since => ipcRenderer.invoke('sync:pull', since),
-  syncPush: records => ipcRenderer.invoke('sync:push', records),
-  syncWipe: () => ipcRenderer.invoke('sync:wipe')
+  pickImage: () => ipcRenderer.invoke('image:pick'),
+  pasteImage: () => ipcRenderer.invoke('image:paste'),
+  // Glisser-déposer : le chemin du fichier n'est lisible qu'ici
+  dropImage: file => ipcRenderer.invoke('image:file', webUtils.getPathForFile(file)),
+  update: {
+    info: () => ipcRenderer.invoke('update:info'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+    setAuto: on => ipcRenderer.invoke('update:auto', on),
+    onStatus: cb => ipcRenderer.on('update:status', (_e, s) => cb(s))
+  }
 });
