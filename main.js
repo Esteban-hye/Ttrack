@@ -117,7 +117,8 @@ ipcMain.handle('image:paste', async () => {
 // ---- Réglages (reglages.json) ----
 const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'reglages.json');
 let settings = null;
-const readJson = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return fallback; } };
+const stripBom = s => s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+const readJson = (file, fallback) => { try { return JSON.parse(stripBom(fs.readFileSync(file, 'utf8'))); } catch { return fallback; } };
 function loadSettings() {
   const s = { autoUpdate: true, ...readJson(SETTINGS_FILE(), {}) };
   if ('server' in s) return s;
