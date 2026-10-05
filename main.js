@@ -10,7 +10,7 @@ const sync = process.env.TTRACK_FAKE_CLOUD ? require('./scripts/fake-cloud') : r
 // Dossier de données alternatif (tests uniquement)
 if (process.env.TTRACK_USERDATA) app.setPath('userData', process.env.TTRACK_USERDATA);
 
-// aliments.json : aliments, plats, journal, objectifs. images/ : les photos. reglages.json : serveur et mises à jour.
+// aliments.json : aliments, plats, journal, objectifs, séances, matériel. images/ : les photos. reglages.json : serveur et mises à jour.
 // sync.bin : connexion au cloud, chiffrée par Windows. sync-etat.json : ce qui a déjà été synchronisé.
 const FILE = () => path.join(app.getPath('userData'), 'aliments.json');
 const IMAGES = () => path.join(app.getPath('userData'), 'images');
@@ -71,18 +71,19 @@ ipcMain.handle('data:load', () => {
   const foods = data.foods || [], dishes = data.dishes || [];
   const entries = data.entries || [], goals = data.goals || [];
   const measures = data.measures || [], steps = data.steps || [], profile = data.profile || [];
+  const workouts = data.workouts || [], sessions = data.sessions || [], equipment = data.equipment || [];
   // Photos qui ne servent plus (aliment ou plat supprimé, photo remplacée)
   const used = new Set([...foods, ...dishes].map(x => x.image).filter(Boolean));
   if (fs.existsSync(IMAGES())) {
     for (const name of fs.readdirSync(IMAGES())) if (!used.has(name)) fs.rmSync(path.join(IMAGES(), name), { force: true });
   }
-  return { foods, dishes, entries, goals, measures, steps, profile };
+  return { foods, dishes, entries, goals, measures, steps, profile, workouts, sessions, equipment };
 });
 
-ipcMain.handle('data:save', (_e, { foods, dishes, entries, goals, measures, steps, profile }) => {
+ipcMain.handle('data:save', (_e, { foods, dishes, entries, goals, measures, steps, profile, workouts, sessions, equipment }) => {
   // Une copie de la version précédente à chaque lancement
   if (!backedUp && fs.existsSync(FILE())) { fs.copyFileSync(FILE(), FILE() + '.bak'); backedUp = true; }
-  writeAtomic(FILE(), JSON.stringify({ version: 4, foods, dishes, entries, goals, measures, steps, profile }, null, 2));
+  writeAtomic(FILE(), JSON.stringify({ version: 4, foods, dishes, entries, goals, measures, steps, profile, workouts, sessions, equipment }, null, 2));
   return true;
 });
 

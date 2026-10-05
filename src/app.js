@@ -27,12 +27,13 @@ const App = (() => {
     Hub.render();
     if (page === 'stats') Stats.render();
     if (page === 'settings') Settings.render();
+    if (page === 'workout') Workouts.render();
   }
 
   function go(p) {
     page = p;
     for (const b of document.querySelectorAll('#tabs button, #settingsBtn')) b.classList.toggle('on', b.dataset.page === p);
-    for (const k of ['hub', 'stats', 'foods', 'dishes', 'settings']) $(`#page-${k}`).hidden = k !== p;
+    for (const k of ['hub', 'stats', 'foods', 'dishes', 'workout', 'settings']) $(`#page-${k}`).hidden = k !== p;
     const lib = LIBS[p];
     $('#libActions').hidden = !lib;
     if (lib) {
@@ -60,13 +61,14 @@ const App = (() => {
     });
   }
 
-  const openModal = () => [Foods.modal, Dishes.modal].find(m => m.isOpen);
+  const openModal = () => [Foods.modal, Dishes.modal, Workouts.modal].find(m => m.isOpen);
   document.addEventListener('keydown', e => {
     const m = openModal(), key = e.key.toLowerCase();
     if (e.key === 'Escape' && m) m.close();
     if (m) return;
     if (e.ctrlKey && key === 'f') { e.preventDefault(); (LIBS[page] ? $('#search') : page === 'hub' ? $('#addSearch') : null)?.focus(); }
     if (e.ctrlKey && key === 'n' && LIBS[page]) { e.preventDefault(); LIBS[page].mod.open(); }
+    if (e.ctrlKey && key === 'n' && page === 'workout') { e.preventDefault(); Workouts.open(); }
   });
   // Empêche d'ouvrir une image lâchée à côté d'une zone photo
   document.addEventListener('dragover', e => e.preventDefault());

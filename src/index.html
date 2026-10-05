@@ -15,6 +15,7 @@
     <button data-page="stats">Stats</button>
     <button data-page="foods"><small>Bibliothèque</small>Aliments <span id="foodCount"></span></button>
     <button data-page="dishes"><small>Bibliothèque</small>Plats <span id="dishCount"></span></button>
+    <button data-page="workout">Séances</button>
   </nav>
   <div class="actions">
     <div class="lib-actions" id="libActions" hidden>
@@ -151,6 +152,49 @@
     </div>
   </section>
 
+  <!-- Séances -->
+  <section id="page-workout" hidden>
+    <div class="wk">
+      <div class="wk-main">
+        <div class="box">
+          <div class="weekbar">
+            <button class="icon-btn big" id="prevWeek" title="Semaine précédente">‹</button>
+            <b id="weekLabel"></b>
+            <button class="icon-btn big" id="nextWeek" title="Semaine suivante">›</button>
+            <button class="btn sm" id="thisWeek">Cette semaine</button>
+          </div>
+          <div class="week" id="week"></div>
+          <p class="mut small">Glisse une séance favorite (à droite) sur un jour. Clique sur une séance du planning pour noter ce que tu fais.</p>
+        </div>
+        <div class="box session-box" id="sessionBox" hidden></div>
+        <div class="box">
+          <h3>Carnet <span class="mut small">séances faites, de la plus récente à la plus ancienne</span></h3>
+          <div id="history"></div>
+        </div>
+      </div>
+      <div class="wk-side">
+        <div class="box">
+          <h3>Mes séances favorites</h3>
+          <div id="tplList" class="tpl-list"></div>
+          <button class="btn pri" id="newWorkout">+ Nouvelle séance</button>
+        </div>
+        <div class="box" id="equipBox">
+          <h3>Mon matériel <span class="mut small">haltères à disques</span></h3>
+          <div class="set-row"><div>Barres d'haltère<small>les barres courtes où tu mets les disques</small></div>
+            <span class="ref"><input id="barCount" inputmode="numeric" placeholder="2"><b>barres</b></span></div>
+          <div class="set-row"><div>Poids d'une barre<small>sans disque</small></div>
+            <span class="ref"><input id="barKg" inputmode="decimal" placeholder="2"><b>kg</b></span></div>
+          <div class="set-row plates-head"><div>Disques<small>au total, toutes barres confondues</small></div><button class="btn sm" id="addPlate">+ Disque</button></div>
+          <div id="plateRows" class="plate-rows"></div>
+          <div class="err" id="equipErr"></div>
+          <div class="loads" id="loads"></div>
+        </div>
+      </div>
+    </div>
+    <datalist id="loadList"></datalist>
+    <datalist id="exList"></datalist>
+  </section>
+
   <!-- Bibliothèque d'aliments -->
   <section id="page-foods" hidden>
     <div class="filters" id="foodFilters"></div>
@@ -225,6 +269,28 @@
   </form>
 </div>
 
+<!-- Fiche d'une séance favorite -->
+<div class="overlay" id="workoutOverlay" hidden>
+  <form class="modal wide" id="workoutForm" autocomplete="off">
+    <h2 class="title"></h2>
+    <div class="fields">
+      <label class="f">Nom de la séance<input name="name" required maxlength="80" placeholder="ex. Bras maison"></label>
+      <div class="f">Exercices <span class="small" id="wkSummary"></span>
+        <div id="exRows" class="ex-rows"></div>
+      </div>
+      <div><button type="button" class="btn sm" id="addExercise">+ Exercice</button></div>
+      <p class="mut small">Répétitions : un nombre (12), une fourchette (8-12) ou « max ». Poids vide = poids du corps. Les poids proposés viennent de ton matériel.</p>
+    </div>
+    <div class="err"></div>
+    <div class="modal-foot">
+      <button type="button" class="btn danger del" hidden>Supprimer</button>
+      <span class="grow"></span>
+      <button type="button" class="btn cancel">Annuler</button>
+      <button class="btn pri">Enregistrer</button>
+    </div>
+  </form>
+</div>
+
 <script src="../node_modules/chart.js/dist/chart.umd.js"></script>
 <script src="common.js"></script>
 <script src="foods.js"></script>
@@ -233,6 +299,7 @@
 <script src="stats.js"></script>
 <script src="body.js"></script>
 <script src="settings.js"></script>
+<script src="workouts.js"></script>
 <script src="cloud.js"></script>
 <script src="app.js"></script>
 </body>

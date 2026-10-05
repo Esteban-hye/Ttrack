@@ -13,7 +13,7 @@ const NUTRIENTS = [
   { k: 'salt', label: 'Sel', unit: 'g' }
 ];
 
-const DB = { foods: [], dishes: [], entries: [], goals: [], measures: [], steps: [], profile: [] };
+const DB = { foods: [], dishes: [], entries: [], goals: [], measures: [], steps: [], profile: [], workouts: [], sessions: [], equipment: [] };
 // Enregistre sur ce PC, puis synchronise peu après si le cloud est connecté
 const save = () => { window.ttrack.save(DB); if (typeof Cloud !== 'undefined') Cloud.soon(); };
 

@@ -7,7 +7,7 @@
 // En cas de modification des deux côtés entre deux synchros, la version de ce PC l'emporte.
 
 const Cloud = (() => {
-  const KINDS = { v2food: 'foods', v2dish: 'dishes', v2entry: 'entries', v2goal: 'goals', v2measure: 'measures', v2steps: 'steps', v2profile: 'profile' };
+  const KINDS = { v2food: 'foods', v2dish: 'dishes', v2entry: 'entries', v2goal: 'goals', v2measure: 'measures', v2steps: 'steps', v2profile: 'profile', v2workout: 'workouts', v2session: 'sessions', v2equip: 'equipment' };
   const api = window.ttrack.cloud;
   let state = { lastPull: null, hashes: {}, images: [] };
   let status = { server: null, signedIn: false, email: null };
@@ -30,7 +30,7 @@ const Cloud = (() => {
     if (!status.signedIn) return;
     if (busy) { again = true; return; }
     // Pas pendant qu'une fiche est ouverte : elle travaille sur l'objet en cours de modification
-    if (Foods.modal.isOpen || Dishes.modal.isOpen) { soon(); return; }
+    if (Foods.modal.isOpen || Dishes.modal.isOpen || Workouts.modal.isOpen) { soon(); return; }
     busy = true; renderState();
     try {
       let changed = false, touched = false;

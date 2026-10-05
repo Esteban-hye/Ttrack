@@ -293,6 +293,102 @@ app.on('browser-window-created', (_e, w) => {
         $('#tabs [data-page="hub"]').click(); await tick();
         check($('#dayList').textContent.includes('retiré de la bibliothèque') && $('#daySummary .big').textContent === '211,9', 'journal après suppression : ' + $('#daySummary .big').textContent);
       `);
+      // ---- Séances ----
+      await step(`
+        $('#tabs [data-page="workout"]').click(); await tick();
+        check(!$('#page-workout').hidden && $('#libActions').hidden, 'onglet Séances non affiché');
+        check(all('#week .day-col').length === 7 && $('#tplList').textContent.includes('Aucune séance'), 'planning ou liste vide incorrects');
+        check($('#loads').textContent.includes('Renseigne'), 'charges sans matériel : ' + $('#loads').textContent);
+        // matériel : 2 barres de 2 kg, disques 0,5 / 1 / 2 kg par 4
+        const chg = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+        chg($('#barKg'), 'abc'); await tick();
+        check($('#equipErr').textContent.includes('barre invalide'), 'poids de barre invalide accepté');
+        chg($('#barCount'), '2'); chg($('#barKg'), '2'); await tick();
+        for (const [kg, n] of [['0,5', '4'], ['1', '4'], ['2', '4']]) {
+          $('#addPlate').click(); await tick();
+          const r = all('#plateRows .plate-row').pop();
+          chg(r.querySelector('[data-f="kg"]'), kg); chg(r.querySelector('[data-f="count"]'), n); await tick();
+        }
+        check(DB.equipment[0].plates.length === 3 && $('#equipErr').textContent === '', 'disques non enregistrés : ' + JSON.stringify(DB.equipment));
+        check(Workouts.loads(true).map(l => l.kg).join() === '2,3,4,5,6,7,8,9', 'charges par paire : ' + Workouts.loads(true).map(l => l.kg));
+        check(Workouts.loads(false).at(-1).kg === 16 && $('#loads').textContent.includes("jusqu'à 16 kg"), 'charge max d\\'un haltère');
+        check(Workouts.mountText(6) === 'barre + 2 kg de chaque côté' && Workouts.mountText(5) === 'barre + 1 + 0,5 kg de chaque côté', 'montage : ' + Workouts.mountText(5));
+        check(all('#loadList option').length === 8, 'charges proposées dans les champs de poids');
+        // séance favorite
+        $('#newWorkout').click(); await tick();
+        check(!$('#workoutOverlay').hidden && all('#exRows .exr:not(.head)').length === 1, 'fiche séance : 1 exercice vide attendu');
+        const ex = (i, f, v) => set(all('#exRows .exr:not(.head)')[i].querySelector('[data-f="' + f + '"]'), v);
+        fill('#workoutForm', 'name', 'Bras maison');
+        ex(0, 'name', 'Curl biceps'); ex(0, 'weight', '6'); ex(0, 'reps', 'abc');
+        await submit('#workoutForm'); check(err('#workoutForm').includes('répétitions invalides'), 'répétitions invalides acceptées');
+        ex(0, 'reps', '8 - 12');
+        $('#addExercise').click(); await tick();
+        ex(1, 'name', 'Dips'); ex(1, 'reps', 'max'); ex(1, 'sets', '3'); ex(1, 'rest', '90');
+        check($('#wkSummary').textContent.includes('6 séries'), 'résumé : ' + $('#wkSummary').textContent);
+        await submit('#workoutForm');
+        check($('#workoutOverlay').hidden && DB.workouts.length === 1 && DB.workouts[0].exercises[0].reps === '8-12' && DB.workouts[0].exercises[1].weight === null, 'séance non enregistrée : ' + err('#workoutForm'));
+        check($('#tplList').textContent.includes('Bras maison') && $('#tplList').textContent.includes('2 exercices'), 'liste des séances : ' + $('#tplList').textContent);
+        // glisser la favorite sur le 1er jour de la semaine
+        const drag = async (from, to) => {
+          const dt = new DataTransfer();
+          from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          from.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt })); await tick();
+        };
+        await drag($('#tplList .tpl'), all('#week .day-col')[0]);
+        check(DB.sessions.length === 1 && all('#week .day-col')[0].querySelectorAll('.sess').length === 1, 'glisser-déposer : séance non posée');
+        check(!$('#sessionBox').hidden && all('#sessionBox .ex').length === 2 && all('#sessionBox .ex')[0].querySelectorAll('.set').length === 3, 'séance ouverte : 2 exercices, 3 séries attendus');
+        check(all('#sessionBox .ex')[0].querySelector('[data-f="weight"]').value === '6', 'poids prévu non repris');
+        check(all('#sessionBox .ex')[0].querySelector('.mount').textContent === 'barre + 2 kg de chaque côté', 'montage affiché dans la séance');
+        // marquer faite sans rien noter : refusé
+        $('#sessionBox [data-done]').click(); await tick();
+        check($('#sessErr').textContent.includes('au moins une série') && !DB.sessions[0].done, 'séance vide marquée faite');
+        const reps = all('#sessionBox .ex')[0].querySelectorAll('[data-f="reps"]');
+        ['15', '15', '13'].forEach((v, i) => chg(reps[i], v)); await tick();
+        chg(all('#sessionBox .ex')[0].querySelector('[data-f="reps"]'), 'x'); await tick();
+        check(all('#sessionBox .ex')[0].querySelector('[data-f="reps"]').classList.contains('bad') && DB.sessions[0].exercises[0].log[0].reps === 15, 'répétition invalide acceptée');
+        chg(all('#sessionBox .ex')[0].querySelector('[data-f="reps"]'), '15');
+        all('#sessionBox .ex')[0].querySelector('[data-add-set]').click(); await tick();
+        check(DB.sessions[0].exercises[0].log.length === 4, 'ajout d\\'une série');
+        all('#sessionBox .ex')[0].querySelectorAll('[data-del-set]')[3].click(); await tick();
+        check(DB.sessions[0].exercises[0].log.length === 3, 'retrait d\\'une série');
+        $('#sessionBox [data-done]').click(); await tick();
+        check(DB.sessions[0].done && all('#week .sess.done').length === 1, 'séance non marquée faite');
+        check($('#history').textContent.includes('Curl biceps : 6 kg × 15 / 15 / 13'), 'carnet : ' + $('#history').textContent.replace(/\\s+/g, ' '));
+        // la même séance deux jours plus tard : poids repris et « dernière fois »
+        await drag($('#tplList .tpl'), all('#week .day-col')[2]);
+        check(DB.sessions.length === 2 && $('#sessionBox .last')?.textContent.includes('6 kg × 15 / 15 / 13'), 'dernière fois absente : ' + $('#sessionBox').textContent.replace(/\\s+/g, ' ').slice(0, 300));
+      `);
+      await shot('9-seances');
+      await step(`
+        const drag = async (from, to) => {
+          const dt = new DataTransfer();
+          from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          from.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt })); await tick();
+        };
+        // déplacer la 2e séance d'un jour
+        const second = DB.sessions.find(s => !s.done);
+        await drag($('#week .sess:not(.done)'), all('#week .day-col')[3]);
+        check(second.date === all('#week .day-col')[3].dataset.date, 'déplacement d\\'une séance');
+        // modifier la favorite ne change pas le carnet
+        $('#tplList .tpl').click(); await tick();
+        fill('#workoutForm', 'name', 'Bras'); await submit('#workoutForm');
+        check(DB.sessions.every(s => s.name === 'Bras maison') && $('#tplList').textContent.includes('Bras'), 'renommer la favorite a changé le carnet');
+        // retirer la séance prévue (deux clics)
+        $('#week .sess:not(.done)').click(); await tick();
+        $('#sessionBox [data-remove]').click(); await tick();
+        check(DB.sessions.length === 2, 'séance retirée dès le premier clic');
+        $('#sessionBox [data-remove]').click(); await tick();
+        check(DB.sessions.length === 1 && $('#sessionBox').hidden, 'séance non retirée');
+        // semaine suivante puis retour
+        $('#nextWeek').click(); await tick();
+        check(!$('#thisWeek').hidden && !all('#week .sess').length, 'semaine suivante');
+        $('#thisWeek').click(); await tick();
+        check(all('#week .sess').length === 1, 'retour à cette semaine');
+      `);
       // ---- Cloud (faux serveur en mémoire) ----
       const IDLE = `const idle = async () => { await tick(60); while (Cloud.busy) await tick(60); };`;
       await step(`${IDLE}
@@ -317,7 +413,7 @@ app.on('browser-window-created', (_e, w) => {
       const rec = id => fake.store.records.get('v2:' + id);
       const skyrId = await w.webContents.executeJavaScript(`DB.foods.find(f => f.name === 'Skyr nature').id`);
       const counts = k => [...fake.store.records.values()].filter(r => r.kind === k && !r.deleted).length;
-      if (rec(skyrId)?.data?.name !== 'Skyr nature' || counts('v2entry') !== 3 || counts('v2goal') !== 2 || counts('v2measure') !== 1 || counts('v2steps') !== 2 || counts('v2profile') !== 1) errors.push(`cloud : envoi initial incorrect (${counts('v2food')} aliments, ${counts('v2entry')} entrées, ${counts('v2goal')} objectifs)`);
+      if (rec(skyrId)?.data?.name !== 'Skyr nature' || counts('v2entry') !== 3 || counts('v2goal') !== 2 || counts('v2measure') !== 1 || counts('v2steps') !== 2 || counts('v2profile') !== 1 || counts('v2workout') !== 1 || counts('v2session') !== 1 || counts('v2equip') !== 1) errors.push(`cloud : envoi initial incorrect (${counts('v2food')} aliments, ${counts('v2entry')} entrées, ${counts('v2goal')} objectifs)`);
       const pushesBefore = fake.store.pushes;
       // « L'autre PC » ajoute une pomme et supprime l'objectif le plus ancien
       const oldGoal = await w.webContents.executeJavaScript(`[...DB.goals].sort((a, b) => a.from.localeCompare(b.from))[0].id`);
